@@ -170,13 +170,6 @@ export const AuthPage: React.FC<AuthPageProps> = ({
     }
   };
 
-  // Quick demo account fill
-  const handleFillDemo = (userPhone: string, userPass: string) => {
-    setPhone(userPhone);
-    setPassword(userPass);
-    setError(null);
-  };
-
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-between py-6 px-4 selection:bg-amber-500 selection:text-black relative overflow-hidden">
       
@@ -323,20 +316,6 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                   </>
                 )}
               </button>
-
-              {/* Demo Account Quick Pick */}
-              <div className="pt-2 text-center">
-                <span className="text-[11px] text-slate-500 block mb-1">
-                  Quick Demo Access:
-                </span>
-                <button
-                  type="button"
-                  onClick={() => handleFillDemo('01712345678', '123456')}
-                  className="text-xs text-slate-400 hover:text-amber-300 underline font-mono cursor-pointer"
-                >
-                  Fill Player (01712345678 / 123456)
-                </button>
-              </div>
             </form>
           )}
 
