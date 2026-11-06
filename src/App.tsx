@@ -119,7 +119,7 @@ export default function App() {
     }
   }, [user, currentUser]);
 
-  // Sync users database on mount from backend
+  // Sync users database, deposits, and withdrawals on mount from backend
   useEffect(() => {
     authApi.fetchUsers().then((fetched) => {
       if (fetched && fetched.length > 0) {
@@ -129,8 +129,21 @@ export default function App() {
           if (fresh) {
             setUser(fresh);
             setCurrentUser(fresh);
+            saveToStorage('active_user_session', fresh);
           }
         }
+      }
+    });
+
+    authApi.fetchDeposits().then((fetchedDeps) => {
+      if (fetchedDeps && fetchedDeps.length > 0) {
+        setDeposits(fetchedDeps);
+      }
+    });
+
+    authApi.fetchWithdrawals().then((fetchedWths) => {
+      if (fetchedWths && fetchedWths.length > 0) {
+        setWithdrawals(fetchedWths);
       }
     });
   }, []);
@@ -197,22 +210,50 @@ export default function App() {
     }
   };
 
-  // Claim Daily Free Bonus ($0.50 USD every 24h)
-  const handleClaimDaily = () => {
-    setUser((u) => ({
-      ...u,
-      walletBalance: Number((u.walletBalance + 0.50).toFixed(2)),
-      lastDailyClaim: Date.now(),
-    }));
+  // Claim Daily Free Bonus ($0.50 USD every 24h) - Persists on server and local
+  const handleClaimDaily = async () => {
+    if (user?.id) {
+      const res = await authApi.claimBonus(user.id, 'daily');
+      if (res.success && res.user) {
+        setUser(res.user);
+        setCurrentUser(res.user);
+        saveToStorage('active_user_session', res.user);
+        setAllUsers((prev) => prev.map((u) => (u.id === res.user!.id ? res.user! : u)));
+        return;
+      }
+    }
+    setUser((u) => {
+      const next = {
+        ...u,
+        walletBalance: Number((u.walletBalance + 0.50).toFixed(2)),
+        lastDailyClaim: Date.now(),
+      };
+      saveToStorage('active_user_session', next);
+      return next;
+    });
   };
 
-  // Claim Weekly Free Bonus ($1.00 USD every 7 days)
-  const handleClaimWeekly = () => {
-    setUser((u) => ({
-      ...u,
-      walletBalance: Number((u.walletBalance + 1.00).toFixed(2)),
-      lastWeeklyClaim: Date.now(),
-    }));
+  // Claim Weekly Free Bonus ($1.00 USD every 7 days) - Persists on server and local
+  const handleClaimWeekly = async () => {
+    if (user?.id) {
+      const res = await authApi.claimBonus(user.id, 'weekly');
+      if (res.success && res.user) {
+        setUser(res.user);
+        setCurrentUser(res.user);
+        saveToStorage('active_user_session', res.user);
+        setAllUsers((prev) => prev.map((u) => (u.id === res.user!.id ? res.user! : u)));
+        return;
+      }
+    }
+    setUser((u) => {
+      const next = {
+        ...u,
+        walletBalance: Number((u.walletBalance + 1.00).toFixed(2)),
+        lastWeeklyClaim: Date.now(),
+      };
+      saveToStorage('active_user_session', next);
+      return next;
+    });
   };
 
   // Round Resolution: House edge algorithm (lesser amount pool wins)
@@ -258,11 +299,18 @@ export default function App() {
         });
 
         if (userWonAmount > 0) {
-          setUser((u) => ({
-            ...u,
-            walletBalance: Number((u.walletBalance + userWonAmount).toFixed(2)),
-            totalWon: Number((u.totalWon + userWonAmount).toFixed(2)),
-          }));
+          setUser((u) => {
+            const nextBal = Number((u.walletBalance + userWonAmount).toFixed(2));
+            const nextWon = Number((u.totalWon + userWonAmount).toFixed(2));
+            authApi.syncBalance(u.id, { walletBalance: nextBal });
+            const next = {
+              ...u,
+              walletBalance: nextBal,
+              totalWon: nextWon,
+            };
+            saveToStorage('active_user_session', next);
+            return next;
+          });
 
           confetti({
             particleCount: 120,
@@ -412,19 +460,23 @@ export default function App() {
     if (amount > user.walletBalance) return;
 
     const roundedAmount = Number(amount.toFixed(2));
+    const nextBal = Number((user.walletBalance - roundedAmount).toFixed(2));
+    authApi.syncBalance(user.id, { walletBalance: nextBal });
 
     setUser((prev) => {
       const newWagered = Number(((prev.totalWagered || 0) + roundedAmount).toFixed(2));
       const newReq = prev.referralWagerRequirement 
         ? Math.max(0, Number((prev.referralWagerRequirement - roundedAmount).toFixed(2))) 
         : 0;
-      return {
+      const next = {
         ...prev,
-        walletBalance: Number((prev.walletBalance - roundedAmount).toFixed(2)),
+        walletBalance: nextBal,
         totalLost: Number((prev.totalLost + roundedAmount).toFixed(2)),
         totalWagered: newWagered,
         referralWagerRequirement: newReq,
       };
+      saveToStorage('active_user_session', next);
+      return next;
     });
 
     const newBet: Bet = {
@@ -449,7 +501,7 @@ export default function App() {
   };
 
   // Deposit Submit Handler with Automated AI Verification & Timestamp Checking
-  const handleSubmitDeposit = (data: {
+  const handleSubmitDeposit = async (data: {
     amountUSD: number;
     binanceTxId: string;
     senderBinanceId: string;
@@ -474,14 +526,37 @@ export default function App() {
       updatedAt: isAutoApproved ? Date.now() : undefined,
     };
 
-    setDeposits((prev) => [newDeposit, ...prev]);
+    // Save to server backend database
+    try {
+      const res = await authApi.createDeposit(newDeposit);
+      if (res.deposit) {
+        setDeposits((prev) => [res.deposit, ...prev.filter((d) => d.id !== res.deposit.id)]);
+      } else {
+        setDeposits((prev) => [newDeposit, ...prev]);
+      }
+      if (res.user) {
+        setUser(res.user);
+        setCurrentUser(res.user);
+        saveToStorage('active_user_session', res.user);
+        setAllUsers((users) =>
+          users.map((u) => (u.id === res.user!.id ? res.user! : u))
+        );
+        return;
+      }
+    } catch (e) {
+      setDeposits((prev) => [newDeposit, ...prev]);
+    }
 
     // Automatically credit user wallet balance immediately if AI verified
     if (isAutoApproved) {
-      setUser((u) => ({
-        ...u,
-        walletBalance: Number((u.walletBalance + data.amountUSD).toFixed(2)),
-      }));
+      setUser((u) => {
+        const next = {
+          ...u,
+          walletBalance: Number((u.walletBalance + data.amountUSD).toFixed(2)),
+        };
+        saveToStorage('active_user_session', next);
+        return next;
+      });
       setAllUsers((users) =>
         users.map((u) => (u.id === user.id ? { ...u, walletBalance: Number((u.walletBalance + data.amountUSD).toFixed(2)) } : u))
       );
@@ -489,7 +564,7 @@ export default function App() {
   };
 
   // Withdraw Submit Handler in USD
-  const handleSubmitWithdrawal = (data: {
+  const handleSubmitWithdrawal = async (data: {
     amountUSD: number;
     binanceType: 'PAY_ID' | 'BEP20' | 'TRC20';
     binanceTarget: string;
@@ -503,12 +578,6 @@ export default function App() {
 
     if (data.amountUSD > user.walletBalance) return;
 
-    setUser((prev) => ({
-      ...prev,
-      walletBalance: Number((prev.walletBalance - data.amountUSD).toFixed(2)),
-      frozenWithdrawal: Number((prev.frozenWithdrawal + data.amountUSD).toFixed(2)),
-    }));
-
     const newWithdrawal: WithdrawalRequest = {
       id: `WTH-${Math.floor(5000 + Math.random() * 9000)}`,
       userId: user.id,
@@ -520,19 +589,50 @@ export default function App() {
       createdAt: Date.now(),
     };
 
-    setWithdrawals((prev) => [newWithdrawal, ...prev]);
+    // Save to server backend database
+    try {
+      const res = await authApi.createWithdrawal(newWithdrawal);
+      if (res.withdrawal) {
+        setWithdrawals((prev) => [res.withdrawal, ...prev.filter((w) => w.id !== res.withdrawal.id)]);
+      } else {
+        setWithdrawals((prev) => [newWithdrawal, ...prev]);
+      }
+      if (res.user) {
+        setUser(res.user);
+        setCurrentUser(res.user);
+        saveToStorage('active_user_session', res.user);
+        setAllUsers((users) =>
+          users.map((u) => (u.id === res.user!.id ? res.user! : u))
+        );
+        return;
+      }
+    } catch (e) {
+      setWithdrawals((prev) => [newWithdrawal, ...prev]);
+    }
+
+    setUser((prev) => {
+      const next = {
+        ...prev,
+        walletBalance: Number((prev.walletBalance - data.amountUSD).toFixed(2)),
+        frozenWithdrawal: Number((prev.frozenWithdrawal + data.amountUSD).toFixed(2)),
+      };
+      saveToStorage('active_user_session', next);
+      return next;
+    });
   };
 
   // Admin Approve Deposit
-  const handleApproveDeposit = (depositId: string) => {
+  const handleApproveDeposit = async (depositId: string) => {
+    await authApi.approveDeposit(depositId);
     setDeposits((prev) =>
       prev.map((d) => {
         if (d.id === depositId && d.status === 'PENDING') {
           if (d.userId === user.id) {
-            setUser((u) => ({
-              ...u,
-              walletBalance: Number((u.walletBalance + d.amountUSD).toFixed(2)),
-            }));
+            setUser((u) => {
+              const next = { ...u, walletBalance: Number((u.walletBalance + d.amountUSD).toFixed(2)) };
+              saveToStorage('active_user_session', next);
+              return next;
+            });
           }
           setAllUsers((users) =>
             users.map((u) => (u.id === d.userId ? { ...u, walletBalance: Number((u.walletBalance + d.amountUSD).toFixed(2)) } : u))
@@ -545,22 +645,28 @@ export default function App() {
   };
 
   // Admin Reject Deposit
-  const handleRejectDeposit = (depositId: string, note?: string) => {
+  const handleRejectDeposit = async (depositId: string, note?: string) => {
+    await authApi.rejectDeposit(depositId, note);
     setDeposits((prev) =>
       prev.map((d) => (d.id === depositId ? { ...d, status: 'REJECTED', adminNote: note, updatedAt: Date.now() } : d))
     );
   };
 
   // Admin Approve Withdrawal
-  const handleApproveWithdrawal = (withdrawalId: string, txHash?: string) => {
+  const handleApproveWithdrawal = async (withdrawalId: string, txHash?: string) => {
+    await authApi.approveWithdrawal(withdrawalId, txHash);
     setWithdrawals((prev) =>
       prev.map((w) => {
         if (w.id === withdrawalId && w.status === 'PENDING') {
           if (w.userId === user.id) {
-            setUser((u) => ({
-              ...u,
-              frozenWithdrawal: Math.max(0, Number((u.frozenWithdrawal - w.amountUSD).toFixed(2))),
-            }));
+            setUser((u) => {
+              const next = {
+                ...u,
+                frozenWithdrawal: Math.max(0, Number((u.frozenWithdrawal - w.amountUSD).toFixed(2))),
+              };
+              saveToStorage('active_user_session', next);
+              return next;
+            });
           }
           return { ...w, status: 'APPROVED', txHash: txHash || 'BINANCE-PAY-SUCCESS', updatedAt: Date.now() };
         }
@@ -570,16 +676,21 @@ export default function App() {
   };
 
   // Admin Reject Withdrawal
-  const handleRejectWithdrawal = (withdrawalId: string, note?: string) => {
+  const handleRejectWithdrawal = async (withdrawalId: string, note?: string) => {
+    await authApi.rejectWithdrawal(withdrawalId, note);
     setWithdrawals((prev) =>
       prev.map((w) => {
         if (w.id === withdrawalId && w.status === 'PENDING') {
           if (w.userId === user.id) {
-            setUser((u) => ({
-              ...u,
-              walletBalance: Number((u.walletBalance + w.amountUSD).toFixed(2)),
-              frozenWithdrawal: Math.max(0, Number((u.frozenWithdrawal - w.amountUSD).toFixed(2))),
-            }));
+            setUser((u) => {
+              const next = {
+                ...u,
+                walletBalance: Number((u.walletBalance + w.amountUSD).toFixed(2)),
+                frozenWithdrawal: Math.max(0, Number((u.frozenWithdrawal - w.amountUSD).toFixed(2))),
+              };
+              saveToStorage('active_user_session', next);
+              return next;
+            });
           }
           return { ...w, status: 'REJECTED', adminNote: note, updatedAt: Date.now() };
         }
@@ -594,9 +705,14 @@ export default function App() {
     soundManager.setMuted(nextMuted);
   };
 
-  const handleAdjustUserBalance = (userId: string, newBalance: number) => {
+  const handleAdjustUserBalance = async (userId: string, newBalance: number) => {
+    await authApi.syncBalance(userId, { walletBalance: newBalance });
     if (user.id === userId) {
-      setUser((u) => ({ ...u, walletBalance: newBalance }));
+      setUser((u) => {
+        const next = { ...u, walletBalance: newBalance };
+        saveToStorage('active_user_session', next);
+        return next;
+      });
     }
     setAllUsers((users) => users.map((u) => (u.id === userId ? { ...u, walletBalance: newBalance } : u)));
   };
@@ -637,7 +753,7 @@ export default function App() {
                   type="password"
                   autoFocus
                   required
-                  placeholder="Passcode (1234 or admin123)"
+                  placeholder="Enter Admin Passcode"
                   value={adminPinInput}
                   onChange={(e) => setAdminPinInput(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-700 rounded-xl py-2.5 px-3 text-center text-lg font-mono tracking-widest text-amber-300 focus:border-rose-400 outline-none"
@@ -810,7 +926,7 @@ export default function App() {
               <input
                 type="password"
                 autoFocus
-                placeholder="Enter PIN (e.g. 1234)"
+                placeholder="Enter Admin Passcode"
                 value={adminPinInput}
                 onChange={(e) => setAdminPinInput(e.target.value)}
                 className="w-full bg-slate-950 border border-slate-700 rounded-xl py-2.5 px-3 text-center text-sm font-mono text-white focus:border-amber-400 outline-none"

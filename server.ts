@@ -279,11 +279,11 @@ async function startServer() {
     }
   });
 
-  // 6. ADMIN: Adjust user balance
+  // 6. ADMIN / USER: Adjust or update user balance
   app.post('/api/users/:id/balance', (req, res) => {
     try {
       const { id } = req.params;
-      const { walletBalance } = req.body;
+      const { walletBalance, totalWagered, referralWagerRequirement } = req.body;
       const db = readDb();
 
       const userIndex = db.users.findIndex((u: any) => u.id === id);
@@ -291,12 +291,298 @@ async function startServer() {
         return res.status(404).json({ error: 'User not found.' });
       }
 
-      db.users[userIndex].walletBalance = Number(Number(walletBalance).toFixed(2));
+      if (walletBalance !== undefined) {
+        db.users[userIndex].walletBalance = Number(Number(walletBalance).toFixed(2));
+      }
+      if (totalWagered !== undefined) {
+        db.users[userIndex].totalWagered = Number(Number(totalWagered).toFixed(2));
+      }
+      if (referralWagerRequirement !== undefined) {
+        db.users[userIndex].referralWagerRequirement = Number(Number(referralWagerRequirement).toFixed(2));
+      }
+
       writeDb(db);
 
-      return res.json({ success: true, walletBalance: db.users[userIndex].walletBalance });
+      const { password: _, ...userSafe } = db.users[userIndex];
+      return res.json({ success: true, user: userSafe });
     } catch (err: any) {
       return res.status(500).json({ error: 'Failed to update balance.' });
+    }
+  });
+
+  // 7. USER: Claim Daily ($0.50) or Weekly ($1.00) Free Bonus (Persistent on disk)
+  app.post('/api/users/:id/claim-bonus', (req, res) => {
+    try {
+      const { id } = req.params;
+      const { type } = req.body; // 'daily' | 'weekly'
+      const db = readDb();
+
+      const userIndex = db.users.findIndex((u: any) => u.id === id);
+      if (userIndex === -1) {
+        return res.status(404).json({ error: 'User not found.' });
+      }
+
+      const now = Date.now();
+      const user = db.users[userIndex];
+      const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+      const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
+      let bonusAmount = 0;
+      if (type === 'daily') {
+        const lastDaily = user.lastDailyClaim || 0;
+        if (now - lastDaily < ONE_DAY_MS) {
+          return res.status(400).json({ error: 'Daily bonus is still on cooldown.' });
+        }
+        bonusAmount = 0.50;
+        db.users[userIndex].lastDailyClaim = now;
+      } else if (type === 'weekly') {
+        const lastWeekly = user.lastWeeklyClaim || 0;
+        if (now - lastWeekly < ONE_WEEK_MS) {
+          return res.status(400).json({ error: 'Weekly bonus is still on cooldown.' });
+        }
+        bonusAmount = 1.00;
+        db.users[userIndex].lastWeeklyClaim = now;
+      } else {
+        return res.status(400).json({ error: 'Invalid bonus type.' });
+      }
+
+      db.users[userIndex].walletBalance = Number(((user.walletBalance || 0) + bonusAmount).toFixed(2));
+      writeDb(db);
+
+      const { password: _, ...userSafe } = db.users[userIndex];
+      return res.json({ success: true, user: userSafe, bonusAdded: bonusAmount });
+    } catch (err: any) {
+      console.error('Claim bonus error:', err);
+      return res.status(500).json({ error: 'Failed to claim bonus.' });
+    }
+  });
+
+  // 8. DEPOSITS: Get all deposits
+  app.get('/api/deposits', (req, res) => {
+    try {
+      const db = readDb();
+      return res.json({ deposits: db.deposits || [] });
+    } catch (err: any) {
+      return res.status(500).json({ error: 'Failed to fetch deposits.' });
+    }
+  });
+
+  // 9. DEPOSITS: Create new deposit (with instant AI auto-approval if valid)
+  app.post('/api/deposits', (req, res) => {
+    try {
+      const depositData = req.body;
+      const db = readDb();
+
+      if (!db.deposits) db.deposits = [];
+
+      const newDeposit = {
+        id: depositData.id || `DEP-${Math.floor(1000 + Math.random() * 9000)}`,
+        userId: depositData.userId,
+        userName: depositData.userName,
+        amountUSD: Number(depositData.amountUSD),
+        binanceTxId: depositData.binanceTxId,
+        senderBinanceId: depositData.senderBinanceId || 'N/A',
+        network: depositData.network,
+        screenshotUrl: depositData.screenshotUrl,
+        status: depositData.status || 'PENDING',
+        aiVerified: Boolean(depositData.aiVerified),
+        aiReason: depositData.aiReason,
+        createdAt: depositData.createdAt || Date.now(),
+        updatedAt: depositData.updatedAt || Date.now(),
+      };
+
+      db.deposits.unshift(newDeposit);
+
+      // If automatically approved, credit wallet balance in database
+      let updatedUser = null;
+      if (newDeposit.status === 'APPROVED') {
+        const userIndex = db.users.findIndex((u: any) => u.id === newDeposit.userId);
+        if (userIndex !== -1) {
+          db.users[userIndex].walletBalance = Number(((db.users[userIndex].walletBalance || 0) + newDeposit.amountUSD).toFixed(2));
+          const { password: _, ...userSafe } = db.users[userIndex];
+          updatedUser = userSafe;
+        }
+      }
+
+      writeDb(db);
+      return res.json({ success: true, deposit: newDeposit, user: updatedUser });
+    } catch (err: any) {
+      console.error('Create deposit error:', err);
+      return res.status(500).json({ error: 'Failed to create deposit.' });
+    }
+  });
+
+  // 10. DEPOSITS: Admin approve deposit
+  app.post('/api/deposits/:id/approve', (req, res) => {
+    try {
+      const { id } = req.params;
+      const db = readDb();
+
+      if (!db.deposits) db.deposits = [];
+      const depIndex = db.deposits.findIndex((d: any) => d.id === id);
+      if (depIndex === -1) {
+        return res.status(404).json({ error: 'Deposit not found.' });
+      }
+
+      const deposit = db.deposits[depIndex];
+      if (deposit.status !== 'APPROVED') {
+        deposit.status = 'APPROVED';
+        deposit.updatedAt = Date.now();
+
+        // Credit user balance
+        const userIndex = db.users.findIndex((u: any) => u.id === deposit.userId);
+        if (userIndex !== -1) {
+          db.users[userIndex].walletBalance = Number(((db.users[userIndex].walletBalance || 0) + deposit.amountUSD).toFixed(2));
+        }
+      }
+
+      writeDb(db);
+      return res.json({ success: true, deposit });
+    } catch (err: any) {
+      return res.status(500).json({ error: 'Failed to approve deposit.' });
+    }
+  });
+
+  // 11. DEPOSITS: Admin reject deposit
+  app.post('/api/deposits/:id/reject', (req, res) => {
+    try {
+      const { id } = req.params;
+      const { note } = req.body;
+      const db = readDb();
+
+      if (!db.deposits) db.deposits = [];
+      const depIndex = db.deposits.findIndex((d: any) => d.id === id);
+      if (depIndex === -1) {
+        return res.status(404).json({ error: 'Deposit not found.' });
+      }
+
+      db.deposits[depIndex].status = 'REJECTED';
+      db.deposits[depIndex].adminNote = note;
+      db.deposits[depIndex].updatedAt = Date.now();
+
+      writeDb(db);
+      return res.json({ success: true, deposit: db.deposits[depIndex] });
+    } catch (err: any) {
+      return res.status(500).json({ error: 'Failed to reject deposit.' });
+    }
+  });
+
+  // 12. WITHDRAWALS: Get all withdrawals
+  app.get('/api/withdrawals', (req, res) => {
+    try {
+      const db = readDb();
+      return res.json({ withdrawals: db.withdrawals || [] });
+    } catch (err: any) {
+      return res.status(500).json({ error: 'Failed to fetch withdrawals.' });
+    }
+  });
+
+  // 13. WITHDRAWALS: Create withdrawal request
+  app.post('/api/withdrawals', (req, res) => {
+    try {
+      const { userId, userName, amountUSD, binanceType, binanceTarget } = req.body;
+      const db = readDb();
+
+      if (!db.withdrawals) db.withdrawals = [];
+
+      const userIndex = db.users.findIndex((u: any) => u.id === userId);
+      if (userIndex === -1) {
+        return res.status(404).json({ error: 'User not found.' });
+      }
+
+      const numAmount = Number(Number(amountUSD).toFixed(2));
+      const currentBalance = db.users[userIndex].walletBalance || 0;
+
+      if (numAmount > currentBalance) {
+        return res.status(400).json({ error: 'Insufficient wallet balance.' });
+      }
+
+      // Deduct from balance and add to frozen
+      db.users[userIndex].walletBalance = Number((currentBalance - numAmount).toFixed(2));
+      db.users[userIndex].frozenWithdrawal = Number(((db.users[userIndex].frozenWithdrawal || 0) + numAmount).toFixed(2));
+
+      const newWithdrawal = {
+        id: `WTH-${Math.floor(5000 + Math.random() * 9000)}`,
+        userId,
+        userName,
+        amountUSD: numAmount,
+        binanceType,
+        binanceTarget,
+        status: 'PENDING',
+        createdAt: Date.now(),
+      };
+
+      db.withdrawals.unshift(newWithdrawal);
+      writeDb(db);
+
+      const { password: _, ...userSafe } = db.users[userIndex];
+      return res.json({ success: true, withdrawal: newWithdrawal, user: userSafe });
+    } catch (err: any) {
+      console.error('Create withdrawal error:', err);
+      return res.status(500).json({ error: 'Failed to process withdrawal.' });
+    }
+  });
+
+  // 14. WITHDRAWALS: Admin approve withdrawal
+  app.post('/api/withdrawals/:id/approve', (req, res) => {
+    try {
+      const { id } = req.params;
+      const { txHash } = req.body;
+      const db = readDb();
+
+      if (!db.withdrawals) db.withdrawals = [];
+      const wthIndex = db.withdrawals.findIndex((w: any) => w.id === id);
+      if (wthIndex === -1) {
+        return res.status(404).json({ error: 'Withdrawal not found.' });
+      }
+
+      const wth = db.withdrawals[wthIndex];
+      wth.status = 'APPROVED';
+      wth.txHash = txHash || 'BINANCE-PAY-SUCCESS';
+      wth.updatedAt = Date.now();
+
+      // Clear from user's frozen balance
+      const userIndex = db.users.findIndex((u: any) => u.id === wth.userId);
+      if (userIndex !== -1) {
+        db.users[userIndex].frozenWithdrawal = Math.max(0, Number(((db.users[userIndex].frozenWithdrawal || 0) - wth.amountUSD).toFixed(2)));
+      }
+
+      writeDb(db);
+      return res.json({ success: true, withdrawal: wth });
+    } catch (err: any) {
+      return res.status(500).json({ error: 'Failed to approve withdrawal.' });
+    }
+  });
+
+  // 15. WITHDRAWALS: Admin reject withdrawal (Refund balance)
+  app.post('/api/withdrawals/:id/reject', (req, res) => {
+    try {
+      const { id } = req.params;
+      const { note } = req.body;
+      const db = readDb();
+
+      if (!db.withdrawals) db.withdrawals = [];
+      const wthIndex = db.withdrawals.findIndex((w: any) => w.id === id);
+      if (wthIndex === -1) {
+        return res.status(404).json({ error: 'Withdrawal not found.' });
+      }
+
+      const wth = db.withdrawals[wthIndex];
+      wth.status = 'REJECTED';
+      wth.adminNote = note;
+      wth.updatedAt = Date.now();
+
+      // Refund to user balance
+      const userIndex = db.users.findIndex((u: any) => u.id === wth.userId);
+      if (userIndex !== -1) {
+        db.users[userIndex].walletBalance = Number(((db.users[userIndex].walletBalance || 0) + wth.amountUSD).toFixed(2));
+        db.users[userIndex].frozenWithdrawal = Math.max(0, Number(((db.users[userIndex].frozenWithdrawal || 0) - wth.amountUSD).toFixed(2)));
+      }
+
+      writeDb(db);
+      return res.json({ success: true, withdrawal: wth });
+    } catch (err: any) {
+      return res.status(500).json({ error: 'Failed to reject withdrawal.' });
     }
   });
 

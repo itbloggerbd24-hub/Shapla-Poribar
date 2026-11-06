@@ -89,30 +89,36 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
 
           {/* User Balance & Quick Actions */}
-          <div className="flex items-center gap-1.5 sm:gap-3">
+          <div className="flex items-center gap-1 sm:gap-2.5">
             
-            {/* Wallet Balance Display in USD */}
-            <div className="flex items-center bg-slate-800/80 hover:bg-slate-800 border border-slate-700/80 rounded-xl px-2.5 py-1.5 sm:px-3 sm:py-2 shadow-sm transition">
-              <div className="w-6 h-6 rounded-lg bg-amber-400/10 flex items-center justify-center mr-1.5 text-amber-400">
-                <Wallet className="w-3.5 h-3.5" />
+            {/* Wallet Balance Display (Clickable to open Deposit) */}
+            <div 
+              onClick={onOpenDeposit}
+              className="flex items-center bg-slate-800/90 hover:bg-slate-800 border border-slate-700/80 rounded-xl px-2 py-1 sm:px-3 sm:py-2 shadow-sm transition cursor-pointer select-none"
+              title="Click to Deposit / Manage Wallet"
+            >
+              <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-lg bg-amber-400/10 flex items-center justify-center mr-1 sm:mr-1.5 text-amber-400 shrink-0">
+                <Wallet className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
               </div>
               <div>
-                <span className="text-[9px] uppercase tracking-wider text-slate-400 font-bold block leading-none">
+                <span className="text-[8px] sm:text-[9px] uppercase tracking-wider text-slate-400 font-bold block leading-none">
                   Balance
                 </span>
                 <div className="flex items-baseline gap-0.5">
-                  <span className="text-xs text-amber-400 font-bold">$</span>
-                  <span className="text-sm sm:text-base font-black text-amber-300 tracking-tight font-mono">
+                  <span className="text-[11px] sm:text-xs text-amber-400 font-bold">$</span>
+                  <span className="text-xs sm:text-base font-black text-amber-300 tracking-tight font-mono">
                     {user.walletBalance.toFixed(2)}
                   </span>
                 </div>
               </div>
             </div>
 
-            {/* Quick Deposit Button (Hidden on mobile, only inside mobile menu) */}
+            {/* Deposit Button: PROMINENT ON ALL DEVICES (Mobile & Desktop) */}
             <button
               onClick={onOpenDeposit}
-              className="hidden sm:flex items-center gap-1 px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs sm:text-sm shadow-lg shadow-emerald-900/30 transition transform active:scale-95 cursor-pointer"
+              type="button"
+              className="flex items-center gap-1 px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-[11px] sm:text-sm shadow-md shadow-emerald-950/40 transition transform active:scale-95 cursor-pointer shrink-0"
+              title="Deposit Funds"
             >
               <ArrowDownCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               <span>Deposit</span>

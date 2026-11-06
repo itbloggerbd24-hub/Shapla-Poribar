@@ -14,15 +14,17 @@
       "binanceAddress": "0x99A8b724f1165A68CcEc240B2f430F9",
       "referralCode": "SP-ALEX77",
       "referralCount": 3,
-      "referralBonusEarned": 1.50,
+      "referralBonusEarned": 1.5,
       "isSuspended": false,
-      "createdAt": 1793450121195
+      "createdAt": 1793450121195,
+      "lastDailyClaim": 0,
+      "lastWeeklyClaim": 0
     },
     {
       "id": "usr_admin",
       "name": "Super Admin",
       "phone": "01899999999",
-      "password": "admin123",
+      "password": "t$5yB1qu4mEa3gR",
       "walletBalance": 15000,
       "frozenWithdrawal": 0,
       "totalWon": 0,

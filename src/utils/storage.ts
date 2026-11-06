@@ -39,7 +39,7 @@ export const INITIAL_ADMIN: UserProfile = {
   id: 'usr_admin',
   name: 'Super Admin',
   phone: '01899999999',
-  password: 'admin123',
+  password: 't$5yB1qu4mEa3gR',
   walletBalance: 15000.00,
   frozenWithdrawal: 0,
   totalWon: 0,

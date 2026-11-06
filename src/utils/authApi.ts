@@ -33,7 +33,7 @@ const getLocalUsers = (): UserProfile[] => {
       id: 'usr_admin',
       name: 'Super Admin',
       phone: '01899999999',
-      password: 'admin123',
+      password: 't$5yB1qu4mEa3gR',
       walletBalance: 15000.00,
       frozenWithdrawal: 0,
       totalWon: 0,
@@ -224,5 +224,146 @@ export const authApi = {
       // ignore
     }
     return getLocalUsers();
+  },
+
+  // Claim Daily or Weekly Bonus (Server persistent)
+  async claimBonus(userId: string, type: 'daily' | 'weekly'): Promise<{ success: boolean; user?: UserProfile; error?: string }> {
+    try {
+      const res = await fetch(`${API_BASE}/users/${userId}/claim-bonus`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        return { success: false, error: json.error || 'Failed to claim bonus' };
+      }
+      return { success: true, user: json.user };
+    } catch (e) {
+      return { success: false, error: 'Network error claiming bonus' };
+    }
+  },
+
+  // Sync user balance on server
+  async syncBalance(userId: string, data: { walletBalance?: number; totalWagered?: number; referralWagerRequirement?: number }): Promise<void> {
+    try {
+      await fetch(`${API_BASE}/users/${userId}/balance`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+    } catch (e) {
+      // ignore
+    }
+  },
+
+  // Deposits API
+  async fetchDeposits(): Promise<any[]> {
+    try {
+      const res = await fetch(`${API_BASE}/deposits`);
+      if (res.ok) {
+        const json = await res.json();
+        return json.deposits || [];
+      }
+    } catch (e) {
+      // ignore
+    }
+    return [];
+  },
+
+  async createDeposit(depositData: any): Promise<{ success: boolean; deposit?: any; user?: UserProfile; error?: string }> {
+    try {
+      const res = await fetch(`${API_BASE}/deposits`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(depositData),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        return { success: false, error: json.error || 'Deposit submission failed' };
+      }
+      return { success: true, deposit: json.deposit, user: json.user };
+    } catch (e) {
+      return { success: false, error: 'Network error submitting deposit' };
+    }
+  },
+
+  async approveDeposit(depositId: string): Promise<boolean> {
+    try {
+      const res = await fetch(`${API_BASE}/deposits/${depositId}/approve`, { method: 'POST' });
+      return res.ok;
+    } catch (e) {
+      return false;
+    }
+  },
+
+  async rejectDeposit(depositId: string, note?: string): Promise<boolean> {
+    try {
+      const res = await fetch(`${API_BASE}/deposits/${depositId}/reject`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ note }),
+      });
+      return res.ok;
+    } catch (e) {
+      return false;
+    }
+  },
+
+  // Withdrawals API
+  async fetchWithdrawals(): Promise<any[]> {
+    try {
+      const res = await fetch(`${API_BASE}/withdrawals`);
+      if (res.ok) {
+        const json = await res.json();
+        return json.withdrawals || [];
+      }
+    } catch (e) {
+      // ignore
+    }
+    return [];
+  },
+
+  async createWithdrawal(wthData: any): Promise<{ success: boolean; withdrawal?: any; user?: UserProfile; error?: string }> {
+    try {
+      const res = await fetch(`${API_BASE}/withdrawals`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(wthData),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        return { success: false, error: json.error || 'Withdrawal submission failed' };
+      }
+      return { success: true, withdrawal: json.withdrawal, user: json.user };
+    } catch (e) {
+      return { success: false, error: 'Network error submitting withdrawal' };
+    }
+  },
+
+  async approveWithdrawal(wthId: string, txHash?: string): Promise<boolean> {
+    try {
+      const res = await fetch(`${API_BASE}/withdrawals/${wthId}/approve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ txHash }),
+      });
+      return res.ok;
+    } catch (e) {
+      return false;
+    }
+  },
+
+  async rejectWithdrawal(wthId: string, note?: string): Promise<boolean> {
+    try {
+      const res = await fetch(`${API_BASE}/withdrawals/${wthId}/reject`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ note }),
+      });
+      return res.ok;
+    } catch (e) {
+      return false;
+    }
   }
 };
