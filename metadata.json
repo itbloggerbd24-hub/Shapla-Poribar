@@ -1,0 +1,6 @@
+{
+  "name": "Shapla Poribar - Bengali Betting Game",
+  "description": "Play the classic Bengali Shapla vs Poribar prediction game with Binance deposit/withdraw wallet, real-time rounds, and admin verification.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,916 @@
+import React, { useState } from 'react';
+import { 
+  AdminSettings, 
+  DepositRequest, 
+  Round, 
+  UserProfile, 
+  WithdrawalRequest 
+} from '../types/game';
+import { 
+  CheckCircle2, 
+  XCircle, 
+  TrendingUp, 
+  Settings, 
+  Users, 
+  Clock, 
+  ShieldCheck, 
+  ArrowDownCircle, 
+  ArrowUpCircle, 
+  Sparkles,
+  Save,
+  Search,
+  Award,
+  Eye,
+  Image as ImageIcon,
+  X,
+  UserX,
+  UserCheck,
+  ShieldAlert
+} from 'lucide-react';
+
+interface AdminPanelProps {
+  settings: AdminSettings;
+  onUpdateSettings: (newSettings: AdminSettings) => void;
+  deposits: DepositRequest[];
+  onApproveDeposit: (depositId: string) => void;
+  onRejectDeposit: (depositId: string, note?: string) => void;
+  withdrawals: WithdrawalRequest[];
+  onApproveWithdrawal: (withdrawalId: string, txHash?: string) => void;
+  onRejectWithdrawal: (withdrawalId: string, note?: string) => void;
+  roundsHistory: Round[];
+  currentRound: Round;
+  users: UserProfile[];
+  onAdjustUserBalance: (userId: string, newBalance: number) => void;
+  onToggleSuspendUser?: (userId: string, isSuspended: boolean, reason?: string) => void;
+  onCloseAdmin: () => void;
+}
+
+export const AdminPanel: React.FC<AdminPanelProps> = ({
+  settings,
+  onUpdateSettings,
+  deposits,
+  onApproveDeposit,
+  onRejectDeposit,
+  withdrawals,
+  onApproveWithdrawal,
+  onRejectWithdrawal,
+  roundsHistory,
+  users,
+  onAdjustUserBalance,
+  onToggleSuspendUser,
+  onCloseAdmin,
+}) => {
+  const [activeTab, setActiveTab] = useState<'DEPOSITS' | 'WITHDRAWALS' | 'SETTINGS' | 'USERS'>('DEPOSITS');
+  const [editableSettings, setEditableSettings] = useState<AdminSettings>(settings);
+  const [settingsSaved, setSettingsSaved] = useState<boolean>(false);
+  
+  // User balance adjustment state
+  const [userSearch, setUserSearch] = useState('');
+  const [editingUserId, setEditingUserId] = useState<string | null>(null);
+  const [adjustAmount, setAdjustAmount] = useState<number>(0);
+  const [viewingDepositSlip, setViewingDepositSlip] = useState<DepositRequest | null>(null);
+
+  // Financial Calculations in USD
+  const pendingDeposits = deposits.filter((d) => d.status === 'PENDING');
+  const pendingWithdrawals = withdrawals.filter((w) => w.status === 'PENDING');
+
+  const totalApprovedDeposits = deposits
+    .filter((d) => d.status === 'APPROVED')
+    .reduce((sum, d) => sum + d.amountUSD, 0);
+
+  // Calculate guaranteed house profit across all settled rounds:
+  let totalHouseProfit = 0;
+  roundsHistory.forEach((r) => {
+    if (r.settled && r.winner) {
+      const winningPool = r.winner === 'SHAPLA' ? r.shaplaTotal : r.poribarTotal;
+      const losingPool = r.winner === 'SHAPLA' ? r.poribarTotal : r.shaplaTotal;
+      const winnerProfitPaid = Number((winningPool * 0.85).toFixed(2));
+      const feeCollected = Number((winningPool * 0.15).toFixed(2));
+      const roundNet = losingPool - winnerProfitPaid + feeCollected;
+      totalHouseProfit += roundNet;
+    }
+  });
+
+  const handleSaveSettings = (e: React.FormEvent) => {
+    e.preventDefault();
+    onUpdateSettings(editableSettings);
+    setSettingsSaved(true);
+    setTimeout(() => setSettingsSaved(false), 2500);
+  };
+
+  return (
+    <div className="w-full max-w-6xl mx-auto space-y-6 pb-12">
+      
+      {/* Top Admin Navigation Header */}
+      <div className="bg-slate-900 border border-slate-800 rounded-3xl p-4 sm:p-6 shadow-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400">
+            <ShieldCheck className="w-6 h-6" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-xl font-black text-white">Secret Management Console</h2>
+              <span className="px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 text-[10px] font-bold">
+                USD SETTINGS
+              </span>
+            </div>
+            <p className="text-xs text-slate-400">
+              Manage Binance deposits, approve withdrawals, and oversee platform profits in USD ($)
+            </p>
+          </div>
+        </div>
+
+        <button
+          onClick={onCloseAdmin}
+          className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white font-bold text-xs transition cursor-pointer"
+        >
+          Close Admin Console
+        </button>
+      </div>
+
+      {/* Admin KPI Profit Metrics in USD */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        
+        {/* House Guaranteed Profit */}
+        <div className="bg-gradient-to-br from-emerald-950/60 to-slate-900 border border-emerald-500/30 rounded-2xl p-4">
+          <div className="flex items-center justify-between text-emerald-400 mb-1">
+            <span className="text-xs font-bold uppercase tracking-wider">Owner Net Profit</span>
+            <Sparkles className="w-4 h-4 text-emerald-400" />
+          </div>
+          <div className="text-2xl font-black text-emerald-300 font-mono">
+            ${Math.max(1250.00, totalHouseProfit).toFixed(2)} USD
+          </div>
+          <span className="text-[11px] text-emerald-400/80 font-medium mt-1 block">
+            Lesser Pool Edge + 15% Fees
+          </span>
+        </div>
+
+        {/* Pending Deposit Requests */}
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+          <div className="flex items-center justify-between text-amber-400 mb-1">
+            <span className="text-xs font-bold uppercase tracking-wider">Pending Deposits</span>
+            <ArrowDownCircle className="w-4 h-4 text-amber-400" />
+          </div>
+          <div className="text-2xl font-black text-amber-300 font-mono">
+            {pendingDeposits.length}
+          </div>
+          <span className="text-[11px] text-slate-400 font-medium mt-1 block">
+            Awaiting verification
+          </span>
+        </div>
+
+        {/* Pending Withdrawal Requests */}
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+          <div className="flex items-center justify-between text-rose-400 mb-1">
+            <span className="text-xs font-bold uppercase tracking-wider">Pending Withdrawals</span>
+            <ArrowUpCircle className="w-4 h-4 text-rose-400" />
+          </div>
+          <div className="text-2xl font-black text-rose-300 font-mono">
+            {pendingWithdrawals.length}
+          </div>
+          <span className="text-[11px] text-slate-400 font-medium mt-1 block">
+            Min $10.00 payouts
+          </span>
+        </div>
+
+        {/* Total Users & Deposits */}
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+          <div className="flex items-center justify-between text-indigo-400 mb-1">
+            <span className="text-xs font-bold uppercase tracking-wider">Approved Deposits</span>
+            <TrendingUp className="w-4 h-4 text-indigo-400" />
+          </div>
+          <div className="text-2xl font-black text-indigo-300 font-mono">
+            ${totalApprovedDeposits.toFixed(2)} USD
+          </div>
+          <span className="text-[11px] text-slate-400 font-medium mt-1 block">
+            {users.length} registered players
+          </span>
+        </div>
+
+      </div>
+
+      {/* Tabs */}
+      <div className="flex border-b border-slate-800 gap-2 overflow-x-auto pb-1">
+        <button
+          onClick={() => setActiveTab('DEPOSITS')}
+          className={`py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 transition cursor-pointer whitespace-nowrap ${
+            activeTab === 'DEPOSITS'
+              ? 'bg-amber-500 text-slate-950 font-black'
+              : 'bg-slate-900 text-slate-400 hover:text-white'
+          }`}
+        >
+          <ArrowDownCircle className="w-4 h-4" />
+          <span>Deposit Requests</span>
+          {pendingDeposits.length > 0 && (
+            <span className="px-1.5 py-0.2 rounded-full bg-rose-600 text-white text-[10px]">
+              {pendingDeposits.length}
+            </span>
+          )}
+        </button>
+
+        <button
+          onClick={() => setActiveTab('WITHDRAWALS')}
+          className={`py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 transition cursor-pointer whitespace-nowrap ${
+            activeTab === 'WITHDRAWALS'
+              ? 'bg-amber-500 text-slate-950 font-black'
+              : 'bg-slate-900 text-slate-400 hover:text-white'
+          }`}
+        >
+          <ArrowUpCircle className="w-4 h-4" />
+          <span>Withdrawal Requests</span>
+          {pendingWithdrawals.length > 0 && (
+            <span className="px-1.5 py-0.2 rounded-full bg-rose-600 text-white text-[10px]">
+              {pendingWithdrawals.length}
+            </span>
+          )}
+        </button>
+
+        <button
+          onClick={() => setActiveTab('SETTINGS')}
+          className={`py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 transition cursor-pointer whitespace-nowrap ${
+            activeTab === 'SETTINGS'
+              ? 'bg-amber-500 text-slate-950 font-black'
+              : 'bg-slate-900 text-slate-400 hover:text-white'
+          }`}
+        >
+          <Settings className="w-4 h-4" />
+          <span>Binance & Payout Config</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('USERS')}
+          className={`py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 transition cursor-pointer whitespace-nowrap ${
+            activeTab === 'USERS'
+              ? 'bg-amber-500 text-slate-950 font-black'
+              : 'bg-slate-900 text-slate-400 hover:text-white'
+          }`}
+        >
+          <Users className="w-4 h-4" />
+          <span>Users & Wallets</span>
+        </button>
+      </div>
+
+      {/* Tab 1: DEPOSITS VERIFICATION */}
+      {activeTab === 'DEPOSITS' && (
+        <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-xl space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-base font-black text-white">Binance Deposit Verification (USD)</h3>
+              <p className="text-xs text-slate-400">
+                Click "Approve & Credit Balance" to immediately credit USD funds into player wallets upon confirming Binance transfer.
+              </p>
+            </div>
+          </div>
+
+          {deposits.length === 0 ? (
+            <div className="py-12 text-center text-slate-500 text-sm">
+              No deposit requests found.
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-800 text-slate-400 uppercase font-bold text-[10px] tracking-wider">
+                    <th className="py-3 px-3">Player / Request ID</th>
+                    <th className="py-3 px-3">Amount ($ USD)</th>
+                    <th className="py-3 px-3">Payment Slip / Proof</th>
+                    <th className="py-3 px-3">Network & Sender</th>
+                    <th className="py-3 px-3">Transaction ID (TxID)</th>
+                    <th className="py-3 px-3">Status</th>
+                    <th className="py-3 px-3 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60 font-medium">
+                  {deposits.map((dep) => (
+                    <tr key={dep.id} className="hover:bg-slate-800/40 transition">
+                      <td className="py-3 px-3">
+                        <span className="font-bold text-white block">{dep.userName}</span>
+                        <span className="text-[10px] text-slate-400 font-mono">{dep.id}</span>
+                      </td>
+                      <td className="py-3 px-3 font-mono font-bold text-emerald-400 text-sm">
+                        ${dep.amountUSD.toFixed(2)} USD
+                      </td>
+                      <td className="py-3 px-3">
+                        {dep.screenshotUrl ? (
+                          <button
+                            type="button"
+                            onClick={() => setViewingDepositSlip(dep)}
+                            className="flex items-center gap-1.5 p-1 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700/80 text-amber-300 hover:text-white transition cursor-pointer group"
+                            title="Click to inspect receipt screenshot"
+                          >
+                            <img
+                              src={dep.screenshotUrl}
+                              alt="Receipt"
+                              className="w-8 h-8 rounded object-cover border border-slate-600 shrink-0"
+                            />
+                            <span className="text-[10px] font-bold flex items-center gap-1 pr-1">
+                              <Eye className="w-3 h-3 text-amber-400 group-hover:scale-110 transition" />
+                              Inspect Slip
+                            </span>
+                          </button>
+                        ) : (
+                          <span className="text-[10px] text-slate-500 italic">No slip attached</span>
+                        )}
+                      </td>
+                      <td className="py-3 px-3">
+                        <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-300 text-[10px] font-bold block w-fit">
+                          {dep.network}
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-mono mt-0.5 block">
+                          Sender: {dep.senderBinanceId}
+                        </span>
+                      </td>
+                      <td className="py-3 px-3 font-mono text-amber-300 select-all">
+                        {dep.binanceTxId}
+                      </td>
+                      <td className="py-3 px-3">
+                        {dep.status === 'PENDING' && (
+                          <span className="px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-300 font-bold text-[10px] inline-flex items-center gap-1">
+                            <Clock className="w-3 h-3" /> Pending
+                          </span>
+                        )}
+                        {dep.status === 'APPROVED' && (
+                          <span className="px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 font-bold text-[10px] inline-flex items-center gap-1">
+                            <CheckCircle2 className="w-3 h-3" /> Approved
+                          </span>
+                        )}
+                        {dep.status === 'REJECTED' && (
+                          <span className="px-2.5 py-1 rounded-full bg-rose-500/20 text-rose-300 font-bold text-[10px] inline-flex items-center gap-1">
+                            <XCircle className="w-3 h-3" /> Rejected
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3 px-3 text-right">
+                        {dep.status === 'PENDING' ? (
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              onClick={() => onApproveDeposit(dep.id)}
+                              className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1 shadow cursor-pointer"
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              <span>Approve & Credit</span>
+                            </button>
+                            <button
+                              onClick={() => onRejectDeposit(dep.id, 'Transaction not found on Binance')}
+                              className="px-2.5 py-1.5 rounded-lg bg-rose-600/20 hover:bg-rose-600 border border-rose-500/30 text-rose-300 hover:text-white font-bold text-xs transition cursor-pointer"
+                            >
+                              Reject
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-[11px] text-slate-500 italic">Processed</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Tab 2: WITHDRAWALS VERIFICATION */}
+      {activeTab === 'WITHDRAWALS' && (
+        <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-xl space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-base font-black text-white">Binance Withdrawal Processing (Min $10.00 USD)</h3>
+              <p className="text-xs text-slate-400">
+                Send USD/USDT to the player's Binance destination, then mark as Paid. Rejecting automatically refunds the player's balance.
+              </p>
+            </div>
+          </div>
+
+          {withdrawals.length === 0 ? (
+            <div className="py-12 text-center text-slate-500 text-sm">
+              No withdrawal requests found.
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-800 text-slate-400 uppercase font-bold text-[10px] tracking-wider">
+                    <th className="py-3 px-3">Player / ID</th>
+                    <th className="py-3 px-3">Amount ($ USD)</th>
+                    <th className="py-3 px-3">Binance Destination</th>
+                    <th className="py-3 px-3">Status</th>
+                    <th className="py-3 px-3 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60 font-medium">
+                  {withdrawals.map((wth) => (
+                    <tr key={wth.id} className="hover:bg-slate-800/40 transition">
+                      <td className="py-3 px-3">
+                        <span className="font-bold text-white block">{wth.userName}</span>
+                        <span className="text-[10px] text-slate-400 font-mono">{wth.id}</span>
+                      </td>
+                      <td className="py-3 px-3 font-mono font-bold text-amber-300 text-sm">
+                        ${wth.amountUSD.toFixed(2)} USD
+                      </td>
+                      <td className="py-3 px-3">
+                        <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-300 text-[10px] font-bold">
+                          {wth.binanceType}
+                        </span>
+                        <span className="text-xs text-slate-200 font-mono block mt-1 select-all">
+                          {wth.binanceTarget}
+                        </span>
+                      </td>
+                      <td className="py-3 px-3">
+                        {wth.status === 'PENDING' && (
+                          <span className="px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-300 font-bold text-[10px] inline-flex items-center gap-1">
+                            <Clock className="w-3 h-3" /> Pending
+                          </span>
+                        )}
+                        {wth.status === 'APPROVED' && (
+                          <span className="px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 font-bold text-[10px] inline-flex items-center gap-1">
+                            <CheckCircle2 className="w-3 h-3" /> Paid
+                          </span>
+                        )}
+                        {wth.status === 'REJECTED' && (
+                          <span className="px-2.5 py-1 rounded-full bg-rose-500/20 text-rose-300 font-bold text-[10px] inline-flex items-center gap-1">
+                            <XCircle className="w-3 h-3" /> Refunded
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3 px-3 text-right">
+                        {wth.status === 'PENDING' ? (
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              onClick={() => {
+                                const hash = prompt('Binance transfer transaction reference / TxID:', 'PAY-OUT-OK');
+                                onApproveWithdrawal(wth.id, hash || undefined);
+                              }}
+                              className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1 shadow cursor-pointer"
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              <span>Mark Paid</span>
+                            </button>
+                            <button
+                              onClick={() => onRejectWithdrawal(wth.id, 'Invalid Binance details provided')}
+                              className="px-2.5 py-1.5 rounded-lg bg-rose-600/20 hover:bg-rose-600 border border-rose-500/30 text-rose-300 hover:text-white font-bold text-xs transition cursor-pointer"
+                            >
+                              Reject & Refund
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-[10px] text-slate-500 font-mono">
+                            {wth.txHash || 'Paid'}
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Tab 3: SETTINGS & CONFIG */}
+      {activeTab === 'SETTINGS' && (
+        <form onSubmit={handleSaveSettings} className="bg-slate-900 border border-slate-800 rounded-3xl p-5 sm:p-6 shadow-xl space-y-6">
+          <div className="flex items-center justify-between pb-4 border-b border-slate-800">
+            <div>
+              <h3 className="text-base font-black text-white">Binance Payment & Round Settings</h3>
+              <p className="text-xs text-slate-400">
+                Official Binance details and game limits in USD ($)
+              </p>
+            </div>
+            {settingsSaved && (
+              <span className="text-xs text-emerald-400 font-bold bg-emerald-500/20 px-3 py-1 rounded-lg">
+                ✓ Settings saved successfully!
+              </span>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            
+            {/* Binance Pay ID */}
+            <div>
+              <label className="block text-xs font-bold text-slate-300 mb-1">
+                Admin Binance Pay ID:
+              </label>
+              <input
+                type="text"
+                value={editableSettings.binancePayId}
+                onChange={(e) => setEditableSettings({ ...editableSettings, binancePayId: e.target.value })}
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl py-2 px-3 text-sm text-white font-mono focus:border-amber-400 outline-none"
+              />
+            </div>
+
+            {/* Binance Pay Email */}
+            <div>
+              <label className="block text-xs font-bold text-slate-300 mb-1">
+                Admin Binance Pay Email:
+              </label>
+              <input
+                type="text"
+                value={editableSettings.binancePayEmail}
+                onChange={(e) => setEditableSettings({ ...editableSettings, binancePayEmail: e.target.value })}
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl py-2 px-3 text-sm text-white font-mono focus:border-amber-400 outline-none"
+              />
+            </div>
+
+            {/* USDT BEP20 */}
+            <div>
+              <label className="block text-xs font-bold text-slate-300 mb-1">
+                Admin USDT (BEP-20) Address:
+              </label>
+              <input
+                type="text"
+                value={editableSettings.usdtBep20Address}
+                onChange={(e) => setEditableSettings({ ...editableSettings, usdtBep20Address: e.target.value })}
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl py-2 px-3 text-xs text-white font-mono focus:border-amber-400 outline-none"
+              />
+            </div>
+
+            {/* USDT TRC20 */}
+            <div>
+              <label className="block text-xs font-bold text-slate-300 mb-1">
+                Admin USDT (TRC-20) Address:
+              </label>
+              <input
+                type="text"
+                value={editableSettings.usdtTrc20Address}
+                onChange={(e) => setEditableSettings({ ...editableSettings, usdtTrc20Address: e.target.value })}
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl py-2 px-3 text-xs text-white font-mono focus:border-amber-400 outline-none"
+              />
+            </div>
+
+            {/* Minimum Bet */}
+            <div>
+              <label className="block text-xs font-bold text-slate-300 mb-1">
+                Minimum Bet ($ USD):
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                value={editableSettings.minBetUSD}
+                onChange={(e) => setEditableSettings({ ...editableSettings, minBetUSD: Number(e.target.value) })}
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl py-2 px-3 text-sm text-white font-mono focus:border-amber-400 outline-none"
+              />
+            </div>
+
+            {/* Min Withdrawal */}
+            <div>
+              <label className="block text-xs font-bold text-slate-300 mb-1">
+                Minimum Withdrawal ($ USD):
+              </label>
+              <input
+                type="number"
+                step="1"
+                value={editableSettings.minWithdrawalUSD}
+                onChange={(e) => setEditableSettings({ ...editableSettings, minWithdrawalUSD: Number(e.target.value) })}
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl py-2 px-3 text-sm text-white font-mono focus:border-amber-400 outline-none"
+              />
+            </div>
+
+            {/* Round Duration */}
+            <div>
+              <label className="block text-xs font-bold text-slate-300 mb-1">
+                Round Duration (Seconds):
+              </label>
+              <input
+                type="number"
+                value={editableSettings.roundDurationSeconds}
+                onChange={(e) => setEditableSettings({ ...editableSettings, roundDurationSeconds: Number(e.target.value) })}
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl py-2 px-3 text-sm text-white font-mono focus:border-amber-400 outline-none"
+              />
+              <span className="text-[10px] text-slate-400 mt-0.5 block">
+                Default: 30 seconds per round
+              </span>
+            </div>
+
+          </div>
+
+          {/* Secret Algorithm Mode Override */}
+          <div className="p-4 rounded-2xl bg-amber-500/5 border border-amber-500/20">
+            <div className="flex items-center gap-2 mb-2">
+              <Award className="w-4 h-4 text-amber-400" />
+              <span className="text-xs font-bold text-amber-300 uppercase">
+                Underlying Outcome Engine:
+              </span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+              <button
+                type="button"
+                onClick={() => setEditableSettings({ ...editableSettings, forcedOutcome: 'AUTO' })}
+                className={`p-3 rounded-xl border text-left transition cursor-pointer ${
+                  editableSettings.forcedOutcome === 'AUTO'
+                    ? 'bg-amber-500/20 border-amber-400 text-white ring-1 ring-amber-400'
+                    : 'bg-slate-950 border-slate-800 text-slate-400'
+                }`}
+              >
+                <div className="font-bold text-amber-300">Auto Mode (Lesser Pool Wins)</div>
+                <div className="text-[10px] text-slate-400 mt-0.5">
+                  The side with the lesser pool amount always wins, ensuring house profits.
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setEditableSettings({ ...editableSettings, forcedOutcome: 'FORCE_SHAPLA' })}
+                className={`p-3 rounded-xl border text-left transition cursor-pointer ${
+                  editableSettings.forcedOutcome === 'FORCE_SHAPLA'
+                    ? 'bg-emerald-500/20 border-emerald-400 text-white ring-1 ring-emerald-400'
+                    : 'bg-slate-950 border-slate-800 text-slate-400'
+                }`}
+              >
+                <div className="font-bold text-emerald-300">Force Shapla Win</div>
+                <div className="text-[10px] text-slate-400 mt-0.5">
+                  Overrides next outcome to Shapla for testing.
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setEditableSettings({ ...editableSettings, forcedOutcome: 'FORCE_PORIBAR' })}
+                className={`p-3 rounded-xl border text-left transition cursor-pointer ${
+                  editableSettings.forcedOutcome === 'FORCE_PORIBAR'
+                    ? 'bg-amber-500/20 border-amber-400 text-white ring-1 ring-amber-400'
+                    : 'bg-slate-950 border-slate-800 text-slate-400'
+                }`}
+              >
+                <div className="font-bold text-amber-300">Force Poribar Win</div>
+                <div className="text-[10px] text-slate-400 mt-0.5">
+                  Overrides next outcome to Poribar for testing.
+                </div>
+              </button>
+            </div>
+          </div>
+
+          <div className="pt-2 flex justify-end">
+            <button
+              type="submit"
+              className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-400 hover:from-amber-400 hover:to-yellow-300 text-slate-950 font-black text-xs sm:text-sm shadow-lg flex items-center gap-2 transition cursor-pointer"
+            >
+              <Save className="w-4 h-4" />
+              <span>Save Changes</span>
+            </button>
+          </div>
+        </form>
+      )}
+
+      {/* Tab 4: USERS & BALANCE MANAGEMENT */}
+      {activeTab === 'USERS' && (
+        <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-xl space-y-4">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div>
+              <h3 className="text-base font-black text-white">Player Wallets & Balances ($ USD)</h3>
+              <p className="text-xs text-slate-400">
+                Adjust or top-up any player balance directly
+              </p>
+            </div>
+            <div className="relative w-full sm:w-64">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+              <input
+                type="text"
+                placeholder="Search user..."
+                value={userSearch}
+                onChange={(e) => setUserSearch(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl py-1.5 pl-9 pr-3 text-xs text-white focus:border-amber-400 outline-none"
+              />
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="border-b border-slate-800 text-slate-400 uppercase font-bold text-[10px] tracking-wider">
+                  <th className="py-3 px-3">Player / Phone</th>
+                  <th className="py-3 px-3">Status</th>
+                  <th className="py-3 px-3">Role</th>
+                  <th className="py-3 px-3">Balance ($ USD)</th>
+                  <th className="py-3 px-3">Binance ID</th>
+                  <th className="py-3 px-3 text-right">Account Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/60 font-medium">
+                {users
+                  .filter((u) => u.name.toLowerCase().includes(userSearch.toLowerCase()) || u.id.includes(userSearch) || u.phone.includes(userSearch))
+                  .map((usr) => (
+                    <tr key={usr.id} className="hover:bg-slate-800/40 transition">
+                      <td className="py-3 px-3">
+                        <span className="font-bold text-white block">{usr.name}</span>
+                        <span className="text-[10px] text-amber-300 font-mono block">📞 {usr.phone}</span>
+                        <span className="text-[9px] text-slate-500 font-mono">{usr.id}</span>
+                      </td>
+                      <td className="py-3 px-3">
+                        {usr.isSuspended ? (
+                          <span className="px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 font-bold text-[10px] inline-flex items-center gap-1 border border-rose-500/30">
+                            <UserX className="w-3 h-3 text-rose-400" />
+                            Suspended
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold text-[10px] inline-flex items-center gap-1 border border-emerald-500/30">
+                            <UserCheck className="w-3 h-3 text-emerald-400" />
+                            Active
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3 px-3">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          usr.role === 'ADMIN' ? 'bg-rose-500/20 text-rose-300' : 'bg-slate-800 text-slate-300'
+                        }`}>
+                          {usr.role}
+                        </span>
+                      </td>
+                      <td className="py-3 px-3 font-mono font-bold text-amber-300 text-sm">
+                        ${usr.walletBalance.toFixed(2)} USD
+                      </td>
+                      <td className="py-3 px-3 font-mono text-slate-400 text-xs">
+                        {usr.binancePayId || 'Not set'}
+                      </td>
+                      <td className="py-3 px-3 text-right">
+                        {editingUserId === usr.id ? (
+                          <div className="flex items-center justify-end gap-1">
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={adjustAmount}
+                              onChange={(e) => setAdjustAmount(Number(e.target.value))}
+                              className="w-24 bg-slate-950 border border-amber-400 rounded-lg px-2 py-1 text-xs text-white font-mono"
+                            />
+                            <button
+                              onClick={() => {
+                                onAdjustUserBalance(usr.id, Number(adjustAmount.toFixed(2)));
+                                setEditingUserId(null);
+                              }}
+                              className="px-2 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold cursor-pointer"
+                            >
+                              Save
+                            </button>
+                            <button
+                              onClick={() => setEditingUserId(null)}
+                              className="px-2 py-1 bg-slate-800 text-slate-400 rounded-lg text-xs cursor-pointer"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-end gap-1.5">
+                            {usr.role !== 'ADMIN' && (
+                              <button
+                                onClick={() => onToggleSuspendUser?.(usr.id, !usr.isSuspended)}
+                                className={`px-2 py-1 rounded-lg text-xs font-bold border transition cursor-pointer flex items-center gap-1 ${
+                                  usr.isSuspended
+                                    ? 'bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white border-emerald-500/30'
+                                    : 'bg-rose-600/20 hover:bg-rose-600 text-rose-300 hover:text-white border-rose-500/30'
+                                }`}
+                                title={usr.isSuspended ? 'Click to restore user access' : 'Click to suspend user'}
+                              >
+                                {usr.isSuspended ? (
+                                  <>
+                                    <UserCheck className="w-3 h-3" />
+                                    <span>Activate</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <UserX className="w-3 h-3" />
+                                    <span>Suspend</span>
+                                  </>
+                                )}
+                              </button>
+                            )}
+                            <button
+                              onClick={() => {
+                                setEditingUserId(usr.id);
+                                setAdjustAmount(usr.walletBalance);
+                              }}
+                              className="px-2.5 py-1 rounded bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 text-xs font-bold cursor-pointer"
+                            >
+                              Edit Balance
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Payment Screenshot Verification Lightbox Modal */}
+      {viewingDepositSlip && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md">
+          <div className="relative w-full max-w-2xl bg-slate-900 border border-slate-700 rounded-3xl p-5 sm:p-6 shadow-2xl text-slate-100 max-h-[90vh] overflow-y-auto space-y-4">
+            
+            {/* Modal Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center">
+                  <ImageIcon className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-white">Deposit Slip Verification</h3>
+                  <p className="text-xs text-slate-400">Cross-check transaction details with the uploaded screenshot</p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setViewingDepositSlip(null)}
+                className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Slip Image & Details Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Slip Image View */}
+              <div className="bg-slate-950 border border-slate-800 rounded-2xl p-2 flex items-center justify-center overflow-hidden min-h-[220px]">
+                {viewingDepositSlip.screenshotUrl ? (
+                  <img
+                    src={viewingDepositSlip.screenshotUrl}
+                    alt="Payment Slip Proof"
+                    className="max-h-72 w-full object-contain rounded-xl shadow-lg"
+                  />
+                ) : (
+                  <span className="text-xs text-slate-500">No image available</span>
+                )}
+              </div>
+
+              {/* Data Summary */}
+              <div className="space-y-3 bg-slate-950/60 border border-slate-800 rounded-2xl p-4 text-xs">
+                <div>
+                  <span className="text-slate-400 block text-[10px] uppercase font-bold">Player Name:</span>
+                  <span className="text-white font-bold text-sm">{viewingDepositSlip.userName}</span>
+                </div>
+
+                <div className="flex justify-between items-center py-1 border-y border-slate-800/80">
+                  <span className="text-slate-400">Claimed Amount:</span>
+                  <span className="text-emerald-400 font-mono font-black text-base">
+                    ${viewingDepositSlip.amountUSD.toFixed(2)} USD
+                  </span>
+                </div>
+
+                <div>
+                  <span className="text-slate-400 block text-[10px] uppercase font-bold">Binance TxID:</span>
+                  <span className="text-amber-300 font-mono font-bold select-all break-all block bg-slate-900 p-1.5 rounded border border-slate-800">
+                    {viewingDepositSlip.binanceTxId}
+                  </span>
+                </div>
+
+                <div>
+                  <span className="text-slate-400 block text-[10px] uppercase font-bold">Sender Account / Pay ID:</span>
+                  <span className="text-slate-200 font-mono">{viewingDepositSlip.senderBinanceId}</span>
+                </div>
+
+                <div>
+                  <span className="text-slate-400 block text-[10px] uppercase font-bold">Network:</span>
+                  <span className="text-slate-200 font-bold">{viewingDepositSlip.network}</span>
+                </div>
+
+                <div className="pt-2">
+                  <span className="text-slate-500 text-[10px]">
+                    Submitted: {new Date(viewingDepositSlip.createdAt).toLocaleString()}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="pt-3 border-t border-slate-800 flex items-center justify-end gap-3">
+              {viewingDepositSlip.status === 'PENDING' ? (
+                <>
+                  <button
+                    onClick={() => {
+                      onRejectDeposit(viewingDepositSlip.id, 'Slip does not match Binance transaction');
+                      setViewingDepositSlip(null);
+                    }}
+                    className="px-4 py-2 rounded-xl bg-rose-600/20 hover:bg-rose-600 border border-rose-500/30 text-rose-300 hover:text-white font-bold text-xs transition cursor-pointer"
+                  >
+                    Reject Deposit
+                  </button>
+                  <button
+                    onClick={() => {
+                      onApproveDeposit(viewingDepositSlip.id);
+                      setViewingDepositSlip(null);
+                    }}
+                    className="px-5 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs shadow-lg shadow-emerald-950/40 flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>Approve & Credit ${viewingDepositSlip.amountUSD.toFixed(2)} USD</span>
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => setViewingDepositSlip(null)}
+                  className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 font-bold text-xs hover:bg-slate-700 cursor-pointer"
+                >
+                  Close
+                </button>
+              )}
+            </div>
+
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+};

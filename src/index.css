@@ -1,0 +1,49 @@
+@import "tailwindcss";
+
+/* Ultra-Realistic Fast Physical 3D Coin Toss Animation */
+@keyframes realCoinFlip {
+  0% {
+    transform: translateY(0px) rotateX(0deg) rotateY(0deg) rotateZ(0deg) scale(1);
+    animation-timing-function: cubic-bezier(0.2, 0.9, 0.3, 1);
+  }
+  15% {
+    transform: translateY(-50px) rotateX(18deg) rotateY(720deg) rotateZ(4deg) scale(1.08);
+  }
+  35% {
+    transform: translateY(-90px) rotateX(14deg) rotateY(1800deg) rotateZ(-3deg) scale(1.18);
+    animation-timing-function: ease-in;
+  }
+  60% {
+    transform: translateY(-55px) rotateX(8deg) rotateY(2880deg) rotateZ(2deg) scale(1.09);
+  }
+  82% {
+    transform: translateY(-10px) rotateX(4deg) rotateY(3600deg) rotateZ(-1deg) scale(1.02);
+  }
+  92% {
+    transform: translateY(5px) rotateX(-2deg) rotateY(3960deg) rotateZ(0deg) scale(0.97);
+  }
+  97% {
+    transform: translateY(-3px) rotateX(1deg) rotateY(3960deg) rotateZ(0deg) scale(1.01);
+  }
+  100% {
+    transform: translateY(0px) rotateX(0deg) rotateY(3960deg) rotateZ(0deg) scale(1);
+  }
+}
+
+.animate-real-coin-flip {
+  animation: realCoinFlip 2.4s cubic-bezier(0.25, 1, 0.45, 1) infinite;
+}
+
+/* Subtle Idle Floating for the Coin */
+@keyframes coinIdleFloat {
+  0%, 100% {
+    transform: translateY(0px) rotateY(0deg);
+  }
+  50% {
+    transform: translateY(-6px) rotateY(12deg);
+  }
+}
+
+.animate-coin-idle {
+  animation: coinIdleFloat 4s ease-in-out infinite;
+}
