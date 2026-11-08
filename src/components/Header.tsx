@@ -14,8 +14,9 @@ import {
   Shield,
   ExternalLink,
   LogOut,
-  Gift,
-  Sparkles
+  Bell,
+  Sparkles,
+  Gift
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -25,6 +26,8 @@ interface HeaderProps {
   onOpenRules: () => void;
   onOpenReferral?: () => void;
   onOpenRewards?: () => void;
+  onOpenNotifications?: () => void;
+  unreadNoticeCount?: number;
   isMuted: boolean;
   onToggleSound: () => void;
   onLogoClick?: () => void;
@@ -38,6 +41,8 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenRules,
   onOpenReferral,
   onOpenRewards,
+  onOpenNotifications,
+  unreadNoticeCount = 0,
   isMuted,
   onToggleSound,
   onLogoClick,
@@ -113,17 +118,6 @@ export const Header: React.FC<HeaderProps> = ({
               </div>
             </div>
 
-            {/* Deposit Button: PROMINENT ON ALL DEVICES (Mobile & Desktop) */}
-            <button
-              onClick={onOpenDeposit}
-              type="button"
-              className="flex items-center gap-1 px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-[11px] sm:text-sm shadow-md shadow-emerald-950/40 transition transform active:scale-95 cursor-pointer shrink-0"
-              title="Deposit Funds"
-            >
-              <ArrowDownCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              <span>Deposit</span>
-            </button>
-
             {/* Refer & Earn Button */}
             {onOpenReferral && (
               <button
@@ -141,12 +135,21 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 onClick={onOpenRewards}
                 className="hidden lg:flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gradient-to-r from-emerald-500/10 to-teal-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 font-bold text-xs transition cursor-pointer"
-                title="Claim Free Daily ($0.50) & Weekly ($1.00) Bonus"
+                title="Claim Free Weekly ($0.50) & Monthly ($1.00) Bonus"
               >
                 <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Free Bonus</span>
+                <span>Weekly/Monthly Bonus</span>
               </button>
             )}
+
+            {/* Desktop version deposit option (ager moto) */}
+            <button
+              onClick={onOpenDeposit}
+              className="hidden md:flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white font-black text-xs shadow-md shadow-emerald-950/40 transition cursor-pointer"
+            >
+              <ArrowDownCircle className="w-3.5 h-3.5 text-white" />
+              <span>Deposit</span>
+            </button>
 
             {/* Desktop-only secondary buttons */}
             <button
@@ -165,12 +168,19 @@ export const Header: React.FC<HeaderProps> = ({
               <HelpCircle className="w-4 h-4" />
             </button>
 
+            {/* Notification Option (In place of sound button on mobile & desktop as requested) */}
             <button
-              onClick={onToggleSound}
-              className="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 border border-slate-700/80 text-slate-300 hover:text-white transition cursor-pointer"
-              title={isMuted ? 'Unmute Sound' : 'Mute Sound'}
+              onClick={onOpenNotifications}
+              className="relative p-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 border border-slate-700/80 text-amber-300 hover:text-white transition cursor-pointer"
+              title="Notifications & Notices"
+              aria-label="Notifications and Notices"
             >
-              {isMuted ? <VolumeX className="w-4 h-4 text-rose-400" /> : <Volume2 className="w-4 h-4 text-emerald-400" />}
+              <Bell className="w-4 h-4" />
+              {unreadNoticeCount !== undefined && unreadNoticeCount > 0 && (
+                <span className="absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full bg-rose-500 text-white font-black text-[9px] flex items-center justify-center ring-2 ring-slate-900 animate-pulse">
+                  {unreadNoticeCount > 9 ? '9+' : unreadNoticeCount}
+                </span>
+              )}
             </button>
 
             {onLogout && (
@@ -289,7 +299,7 @@ export const Header: React.FC<HeaderProps> = ({
                   >
                     <div className="flex items-center gap-3">
                       <Sparkles className="w-4 h-4 text-emerald-400" />
-                      <span className="font-bold">Free Daily/Weekly Bonus</span>
+                      <span className="font-bold">Weekly & Monthly Rewards</span>
                     </div>
                     <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-300 font-bold">
                       Claim

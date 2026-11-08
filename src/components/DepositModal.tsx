@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { AdminSettings, DepositRequest } from '../types/game';
+import { AdminSettings, DepositRequest, SupportPaymentMethod } from '../types/game';
 import { 
   X, 
   Copy, 
@@ -12,7 +12,13 @@ import {
   Image as ImageIcon,
   Trash2,
   FileCheck,
-  Clock
+  Clock,
+  Headphones,
+  Smartphone,
+  Wallet,
+  Sparkles,
+  ExternalLink,
+  Info
 } from 'lucide-react';
 
 interface DepositModalProps {
@@ -24,13 +30,41 @@ interface DepositModalProps {
     amountUSD: number;
     binanceTxId: string;
     senderBinanceId: string;
-    network: 'BINANCE_PAY' | 'USDT_BEP20' | 'USDT_TRC20';
+    network?: string;
+    depositType?: 'AI_BINANCE' | 'SUPPORT_AGENT';
+    supportMethodName?: string;
     screenshotUrl?: string;
+    userNote?: string;
   }) => void;
+  onOpenHelpDesk?: () => void;
 }
 
-// Default clean Binance Pay sample voucher for easy 1-click testing
-const SAMPLE_BINANCE_SLIP = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='260' viewBox='0 0 400 260' fill='%23181a20'><rect width='400' height='260' rx='16' fill='%23181a20'/><circle cx='200' cy='45' r='22' fill='%230ecb81'/><path d='M192 45l5 5 11-11' stroke='white' stroke-width='3' fill='none' stroke-linecap='round'/><text x='200' y='95' fill='%23ffffff' font-family='sans-serif' font-size='18' font-weight='bold' text-anchor='middle'>Payment Successful</text><text x='200' y='125' fill='%23f0b90b' font-family='monospace' font-size='22' font-weight='bold' text-anchor='middle'>+10.00 USDT</text><line x1='30' y1='145' x2='370' y2='145' stroke='%232b313a' stroke-dasharray='4'/><text x='40' y='175' fill='%23848e9c' font-family='sans-serif' font-size='12'>Recipient ID:</text><text x='360' y='175' fill='%23ffffff' font-family='monospace' font-size='12' text-anchor='end'>849204918 (Admin)</text><text x='40' y='200' fill='%23848e9c' font-family='sans-serif' font-size='12'>TxID / Order ID:</text><text x='360' y='200' fill='%23ffffff' font-family='monospace' font-size='12' text-anchor='end'>BNP9824109842</text><text x='200' y='238' fill='%230ecb81' font-family='sans-serif' font-size='11' text-anchor='middle'>Verified by Binance Pay System</text></svg>";
+const DEFAULT_SUPPORT_METHODS: SupportPaymentMethod[] = [
+  {
+    id: 'sp_binance_pay',
+    name: 'Binance Pay ID (Official Admin)',
+    accountNumber: '849204918',
+    accountType: 'Binance Pay ID',
+    instructions: 'Open your Binance App, go to Pay, send USDT to Recipient ID 849204918, then submit your TxID and screenshot.',
+    isActive: true,
+  },
+  {
+    id: 'sp_usdt_trc20',
+    name: 'USDT (TRC-20 Network)',
+    accountNumber: 'TN8tL6q3XpLwV8jKkU128H4mZ1R9wWkQ9p',
+    accountType: 'Crypto TRC-20',
+    instructions: 'Transfer USDT over TRC-20 network to the address above, then submit your transaction hash (TxID).',
+    isActive: true,
+  },
+  {
+    id: 'sp_usdt_bep20',
+    name: 'USDT (BEP-20 Network)',
+    accountNumber: '0x99A8b724f1165A68CcEc240B2f430F9',
+    accountType: 'Crypto BEP-20',
+    instructions: 'Transfer USDT over BNB Smart Chain (BEP-20) network to the address above, then submit your transaction hash (TxID).',
+    isActive: true,
+  }
+];
 
 export const DepositModal: React.FC<DepositModalProps> = ({
   isOpen,
@@ -38,16 +72,34 @@ export const DepositModal: React.FC<DepositModalProps> = ({
   adminSettings,
   userDeposits,
   onSubmitDeposit,
+  onOpenHelpDesk,
 }) => {
+  // Deposit Mode Tab
+  const [depositTab, setDepositTab] = useState<'SUPPORT_AGENT' | 'AI_BINANCE'>('AI_BINANCE');
+
+  // Support Agent Deposit State
+  const activeMethods = (adminSettings.supportPaymentMethods && adminSettings.supportPaymentMethods.length > 0)
+    ? adminSettings.supportPaymentMethods.filter((m) => m.isActive)
+    : DEFAULT_SUPPORT_METHODS;
+
+  const [selectedMethodId, setSelectedMethodId] = useState<string>(activeMethods[0]?.id || 'sp_binance_pay');
+  const selectedMethod = activeMethods.find((m) => m.id === selectedMethodId) || activeMethods[0] || DEFAULT_SUPPORT_METHODS[0];
+
   const [usdAmount, setUsdAmount] = useState<number>(10.00);
-  const [network, setNetwork] = useState<'BINANCE_PAY' | 'USDT_BEP20' | 'USDT_TRC20'>('BINANCE_PAY');
-  const [txId, setTxId] = useState<string>('');
   const [senderId, setSenderId] = useState<string>('');
+  const [txId, setTxId] = useState<string>('');
+  const [userNote, setUserNote] = useState<string>('');
   const [screenshotUrl, setScreenshotUrl] = useState<string>('');
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [submittedSuccess, setSubmittedSuccess] = useState<boolean>(false);
+  const [successMessage, setSuccessMessage] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // AI Binance tab states
+  const [network, setNetwork] = useState<'BINANCE_PAY' | 'USDT_BEP20' | 'USDT_TRC20'>('BINANCE_PAY');
+  const [isVerifyingAI, setIsVerifyingAI] = useState<boolean>(false);
+  const [transferAgeMinutes, setTransferAgeMinutes] = useState<number>(3);
 
   if (!isOpen) return null;
 
@@ -73,29 +125,53 @@ export const DepositModal: React.FC<DepositModalProps> = ({
     }
   };
 
-  const [isVerifyingAI, setIsVerifyingAI] = useState<boolean>(false);
-  const [aiResult, setAiResult] = useState<{ verified: boolean; message: string; autoApproved: boolean } | null>(null);
-  const [transferAgeMinutes, setTransferAgeMinutes] = useState<number>(3); // default fresh: 3 minutes ago
-
-  const handleUseDemoScreenshot = () => {
-    setScreenshotUrl(SAMPLE_BINANCE_SLIP);
-    if (!txId) {
-      setTxId(`BNP${Math.floor(1000000000 + Math.random() * 9000000000)}`);
-    }
-    setTransferAgeMinutes(3); // within 30m
-    setError(null);
-  };
-
   const handleRemoveScreenshot = () => {
     setScreenshotUrl('');
     if (fileInputRef.current) fileInputRef.current.value = '';
-    setAiResult(null);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // Submit Support Agent Deposit
+  const handleSubmitSupportDeposit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!usdAmount || usdAmount < adminSettings.minDepositUSD) {
-      setError(`Minimum deposit is $${adminSettings.minDepositUSD.toFixed(2)} USD.`);
+    if (!usdAmount || usdAmount < (adminSettings.minDepositUSD || 5)) {
+      setError(`Minimum deposit is $${(adminSettings.minDepositUSD || 5).toFixed(2)} USD.`);
+      return;
+    }
+    if (!txId.trim()) {
+      setError('Transaction ID (TxID / Order ID) is required.');
+      return;
+    }
+    if (!senderId.trim()) {
+      setError('Please provide your sender account or Pay ID.');
+      return;
+    }
+
+    setError(null);
+
+    onSubmitDeposit({
+      amountUSD: Number(usdAmount.toFixed(2)),
+      binanceTxId: txId.trim(),
+      senderBinanceId: senderId.trim(),
+      network: selectedMethod.accountType || selectedMethod.name,
+      depositType: 'SUPPORT_AGENT',
+      supportMethodName: selectedMethod.name,
+      screenshotUrl: screenshotUrl || undefined,
+      userNote: userNote.trim() || undefined,
+    });
+
+    setSubmittedSuccess(true);
+    setSuccessMessage(`Your $${usdAmount.toFixed(2)} deposit request has been submitted to Support. An agent will verify and credit your balance shortly.`);
+    setTxId('');
+    setSenderId('');
+    setUserNote('');
+    setScreenshotUrl('');
+  };
+
+  // Submit Binance AI Deposit
+  const handleSubmitAiDeposit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!usdAmount || usdAmount < (adminSettings.minDepositUSD || 5)) {
+      setError(`Minimum deposit is $${(adminSettings.minDepositUSD || 5).toFixed(2)} USD.`);
       return;
     }
     if (!txId.trim()) {
@@ -103,63 +179,56 @@ export const DepositModal: React.FC<DepositModalProps> = ({
       return;
     }
     if (!screenshotUrl) {
-      setError('Please attach your payment screenshot so system and admin can verify.');
+      setError('Please attach your payment screenshot for automated verification.');
       return;
     }
 
-    // Check 30-minute freshness rule
     if (transferAgeMinutes > 30) {
-      setError('⚠️ Screenshot timestamp is older than 30 minutes! For security, transfers older than 30 minutes cannot be auto-verified. Please contact our 24/7 Help Desk.');
+      setError('⚠️ Screenshot timestamp is older than 30 minutes! Please use Support Agent deposit or contact Help Desk.');
       return;
     }
 
     setError(null);
     setIsVerifyingAI(true);
 
-    // AI automated verification pipeline
     setTimeout(() => {
       setIsVerifyingAI(false);
-      const isAutoApproved = usdAmount >= 5 && transferAgeMinutes <= 30;
-
-      setAiResult({
-        verified: true,
-        autoApproved: isAutoApproved,
-        message: isAutoApproved 
-          ? `AI Verified: Transferred to Admin (${adminSettings.binancePayId}) within ${transferAgeMinutes}m. Approved instantly!`
-          : `Submitted for Admin Review: Older than 30 minutes or manual check needed.`,
-      });
+      const isAutoApproved = usdAmount >= (adminSettings.minDepositUSD || 5) && transferAgeMinutes <= 30;
 
       onSubmitDeposit({
         amountUSD: Number(usdAmount.toFixed(2)),
         binanceTxId: txId.trim(),
         senderBinanceId: senderId.trim() || 'N/A',
         network,
+        depositType: 'AI_BINANCE',
         screenshotUrl,
       });
 
       setSubmittedSuccess(true);
+      setSuccessMessage(isAutoApproved 
+        ? `AI verification successful! $${usdAmount.toFixed(2)} USD has been credited to your wallet.` 
+        : `Deposit slip submitted. Support is reviewing and will credit your balance shortly.`);
       setTxId('');
+      setSenderId('');
       setScreenshotUrl('');
-      setTimeout(() => {
-        setSubmittedSuccess(false);
-        setAiResult(null);
-      }, 5000);
     }, 1200);
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/80 backdrop-blur-sm overflow-y-auto">
-      <div className="relative w-full max-w-lg bg-slate-900 border border-slate-800 rounded-3xl p-5 sm:p-6 shadow-2xl text-slate-100 my-6 max-h-[90vh] overflow-y-auto">
+      <div className="relative w-full max-w-xl bg-slate-900 border border-slate-800 rounded-3xl p-5 sm:p-6 shadow-2xl text-slate-100 my-6 max-h-[92vh] overflow-y-auto">
         
         {/* Header */}
-        <div className="flex items-center justify-between pb-4 border-b border-slate-800 sticky top-0 bg-slate-900 z-10">
+        <div className="flex items-center justify-between pb-4 border-b border-slate-800 sticky top-0 bg-slate-900 z-20">
           <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
-              <QrCode className="w-5 h-5" />
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 p-0.5 flex items-center justify-center shadow-md">
+              <div className="w-full h-full bg-slate-950 rounded-[10px] flex items-center justify-center text-emerald-400 font-bold">
+                <Wallet className="w-5 h-5" />
+              </div>
             </div>
             <div>
-              <h2 className="text-lg font-black text-white">Binance Deposit (USD / USDT)</h2>
-              <p className="text-xs text-slate-400">Minimum $5.00 USD • AI automated approval within 30 mins</p>
+              <h2 className="text-lg font-black text-white">Deposit USD (Binance)</h2>
+              <p className="text-xs text-slate-400">Min $5.00 USD • Get $1.00 FREE welcome bonus on 1st deposit!</p>
             </div>
           </div>
           <button
@@ -170,274 +239,261 @@ export const DepositModal: React.FC<DepositModalProps> = ({
           </button>
         </div>
 
+        {/* Deposit Methods Tab Switcher */}
+        <div className="grid grid-cols-2 gap-2 mt-4 p-1 rounded-2xl bg-slate-950 border border-slate-800">
+          <button
+            type="button"
+            onClick={() => {
+              setDepositTab('SUPPORT_AGENT');
+              setError(null);
+            }}
+            className={`py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition cursor-pointer ${
+              depositTab === 'SUPPORT_AGENT'
+                ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <Headphones className="w-4 h-4 text-emerald-300" />
+            <span>Support Agent</span>
+            <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-amber-400 text-slate-950 font-black">
+              Help
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setDepositTab('AI_BINANCE');
+              setError(null);
+            }}
+            className={`py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition cursor-pointer ${
+              depositTab === 'AI_BINANCE'
+                ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 shadow'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <QrCode className="w-4 h-4" />
+            <span>Binance AI Auto</span>
+          </button>
+        </div>
+
+        {/* Success Feedback View */}
         {submittedSuccess ? (
           <div className="py-8 text-center space-y-3">
             <div className="w-16 h-16 rounded-full bg-emerald-500/20 border-2 border-emerald-500 text-emerald-400 mx-auto flex items-center justify-center animate-bounce">
               <CheckCircle2 className="w-8 h-8" />
             </div>
             <h3 className="text-xl font-bold text-emerald-300">
-              {aiResult?.autoApproved ? 'Deposit AI Verified & Approved!' : 'Deposit Slip Submitted!'}
+              Deposit Request Submitted!
             </h3>
-            <p className="text-sm text-slate-300 max-w-sm mx-auto leading-relaxed">
-              {aiResult?.message || 'Payment screenshot received. Admin will cross-check and credit your balance.'}
+            <p className="text-sm text-slate-300 max-w-md mx-auto leading-relaxed">
+              {successMessage}
             </p>
-            <div className="p-3 bg-slate-950 rounded-xl border border-emerald-500/30 text-xs font-mono text-emerald-300 max-w-sm mx-auto">
-              ✓ Admin Recipient: 849204918 • Timestamp: within 30 min • Min $5.00 OK
+
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-2.5 mt-4">
+              {onOpenHelpDesk && (
+                <button
+                  onClick={() => {
+                    setSubmittedSuccess(false);
+                    onClose();
+                    onOpenHelpDesk();
+                  }}
+                  className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs flex items-center justify-center gap-2 shadow cursor-pointer"
+                >
+                  <Headphones className="w-4 h-4" />
+                  <span>Chat with Support Agent</span>
+                </button>
+              )}
+
+              <button
+                onClick={() => setSubmittedSuccess(false)}
+                className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 font-bold text-xs text-slate-200 transition cursor-pointer"
+              >
+                Make Another Deposit
+              </button>
             </div>
-            <button
-              onClick={() => {
-                setSubmittedSuccess(false);
-                setAiResult(null);
-              }}
-              className="mt-4 px-6 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 font-bold text-sm text-slate-200 transition cursor-pointer"
-            >
-              Close / Deposit Again
-            </button>
           </div>
         ) : (
           <div className="mt-4 space-y-4">
             
-            {/* Step 1: Binance Admin Details */}
-            <div className="p-3.5 rounded-2xl bg-amber-500/5 border border-amber-500/20 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-amber-400 uppercase tracking-wider">
-                  1. Send Payment to Admin Binance:
-                </span>
-                <span className="text-[11px] font-semibold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md font-mono">
-                  1 USDT = $1.00 USD
-                </span>
-              </div>
-
-              {/* Network Selector */}
-              <div className="grid grid-cols-3 gap-2 text-xs">
-                <button
-                  type="button"
-                  onClick={() => setNetwork('BINANCE_PAY')}
-                  className={`py-2 px-1 rounded-xl font-bold border transition text-center cursor-pointer ${
-                    network === 'BINANCE_PAY'
-                      ? 'bg-amber-500/20 border-amber-400 text-amber-300'
-                      : 'bg-slate-800/60 border-slate-700 text-slate-300'
-                  }`}
-                >
-                  Binance Pay
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setNetwork('USDT_BEP20')}
-                  className={`py-2 px-1 rounded-xl font-bold border transition text-center cursor-pointer ${
-                    network === 'USDT_BEP20'
-                      ? 'bg-amber-500/20 border-amber-400 text-amber-300'
-                      : 'bg-slate-800/60 border-slate-700 text-slate-300'
-                  }`}
-                >
-                  USDT (BEP-20)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setNetwork('USDT_TRC20')}
-                  className={`py-2 px-1 rounded-xl font-bold border transition text-center cursor-pointer ${
-                    network === 'USDT_TRC20'
-                      ? 'bg-amber-500/20 border-amber-400 text-amber-300'
-                      : 'bg-slate-800/60 border-slate-700 text-slate-300'
-                  }`}
-                >
-                  USDT (TRC-20)
-                </button>
-              </div>
-
-              {/* Target Address / Pay ID */}
-              <div className="bg-slate-950 border border-slate-800 rounded-xl p-2.5 flex items-center justify-between gap-2">
-                <div className="truncate">
-                  <span className="text-[10px] text-slate-400 block font-semibold">
-                    {network === 'BINANCE_PAY' ? 'Official Admin Binance Pay ID' : `${network} Address`}
-                  </span>
-                  <span className="text-xs sm:text-sm font-mono font-bold text-amber-300 truncate block">
-                    {network === 'BINANCE_PAY'
-                      ? adminSettings.binancePayId
-                      : network === 'USDT_BEP20'
-                      ? adminSettings.usdtBep20Address
-                      : adminSettings.usdtTrc20Address}
-                  </span>
+            {/* TAB 1: SUPPORT AGENT DEPOSIT (Exclusively located in Support Box) */}
+            {depositTab === 'SUPPORT_AGENT' && (
+              <div className="p-6 rounded-2xl bg-gradient-to-br from-emerald-950/40 via-slate-900 to-slate-950 border border-emerald-500/40 text-center space-y-4">
+                <div className="w-14 h-14 rounded-2xl bg-emerald-500/20 text-emerald-400 mx-auto flex items-center justify-center">
+                  <Headphones className="w-7 h-7" />
+                </div>
+                <div>
+                  <h4 className="text-base font-black text-white">
+                    Support Agent Binance Deposit
+                  </h4>
+                  <p className="text-xs text-slate-300 mt-1 max-w-sm mx-auto leading-relaxed">
+                    For assistance with Binance Pay or USDT deposit, open our live 24/7 support desk. An agent will verify your payment and credit your balance immediately.
+                  </p>
                 </div>
                 <button
-                  onClick={() =>
-                    copyToClipboard(
-                      network === 'BINANCE_PAY'
-                        ? adminSettings.binancePayId
-                        : network === 'USDT_BEP20'
-                        ? adminSettings.usdtBep20Address
-                        : adminSettings.usdtTrc20Address,
-                      'admin_addr'
-                    )
-                  }
-                  className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 transition shrink-0 cursor-pointer"
-                  title="Copy"
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    if (onOpenHelpDesk) onOpenHelpDesk();
+                  }}
+                  className="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-500 hover:from-emerald-500 hover:to-teal-400 text-white font-black text-xs shadow-lg transition cursor-pointer flex items-center justify-center gap-2"
                 >
-                  {copiedField === 'admin_addr' ? (
-                    <Check className="w-4 h-4 text-emerald-400" />
-                  ) : (
-                    <Copy className="w-4 h-4" />
-                  )}
+                  <Headphones className="w-4 h-4" />
+                  <span>Open Support Desk</span>
                 </button>
               </div>
-            </div>
+            )}
 
-            {/* Step 2: Verification Form */}
-            <form onSubmit={handleSubmit} className="space-y-3.5">
-              
-              {/* Deposit Amount */}
-              <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">
-                  2. Deposit Amount ($ USD):
-                </label>
-                <div className="relative">
-                  <span className="absolute left-3 top-2 text-amber-400 font-bold">$</span>
+            {/* TAB 2: BINANCE AI AUTO DEPOSIT (Automated Verification) */}
+            {depositTab === 'AI_BINANCE' && (
+              <form onSubmit={handleSubmitAiDeposit} className="space-y-4">
+                
+                {/* Step 1: Binance Admin Details */}
+                <div className="p-3.5 rounded-2xl bg-amber-500/5 border border-amber-500/20 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-amber-400 uppercase tracking-wider">
+                      1. Send Payment to Admin Binance:
+                    </span>
+                    <span className="text-[11px] font-semibold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md font-mono">
+                      1 USDT = $1.00 USD
+                    </span>
+                  </div>
+
+                  {/* Network Selector */}
+                  <div className="grid grid-cols-3 gap-2 text-xs">
+                    {(['BINANCE_PAY', 'USDT_BEP20', 'USDT_TRC20'] as const).map((net) => (
+                      <button
+                        key={net}
+                        type="button"
+                        onClick={() => setNetwork(net)}
+                        className={`py-2 px-1 rounded-xl font-bold border transition text-center cursor-pointer ${
+                          network === net
+                            ? 'bg-amber-500/20 border-amber-400 text-amber-300'
+                            : 'bg-slate-800/60 border-slate-700 text-slate-300'
+                        }`}
+                      >
+                        {net === 'BINANCE_PAY' ? 'Binance Pay' : net === 'USDT_BEP20' ? 'USDT (BEP-20)' : 'USDT (TRC-20)'}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Target Address / Pay ID */}
+                  <div className="bg-slate-950 border border-slate-800 rounded-xl p-2.5 flex items-center justify-between gap-2">
+                    <div className="truncate">
+                      <span className="text-[10px] text-slate-400 block font-semibold">
+                        {network === 'BINANCE_PAY' ? 'Official Admin Binance Pay ID' : `${network} Address`}
+                      </span>
+                      <span className="text-xs sm:text-sm font-mono font-bold text-amber-300 truncate block">
+                        {network === 'BINANCE_PAY'
+                          ? adminSettings.binancePayId
+                          : network === 'USDT_BEP20'
+                          ? adminSettings.usdtBep20Address
+                          : adminSettings.usdtTrc20Address}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        copyToClipboard(
+                          network === 'BINANCE_PAY'
+                            ? adminSettings.binancePayId
+                            : network === 'USDT_BEP20'
+                            ? adminSettings.usdtBep20Address
+                            : adminSettings.usdtTrc20Address,
+                          'admin_addr'
+                        )
+                      }
+                      className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 transition shrink-0 cursor-pointer"
+                      title="Copy"
+                    >
+                      {copiedField === 'admin_addr' ? (
+                        <Check className="w-4 h-4 text-emerald-400" />
+                      ) : (
+                        <Copy className="w-4 h-4" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Amount */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">
+                    Deposit Amount ($ USD):
+                  </label>
                   <input
                     type="number"
-                    step="0.01"
-                    min={adminSettings.minDepositUSD}
+                    min="5"
+                    step="0.5"
                     value={usdAmount}
                     onChange={(e) => setUsdAmount(Number(e.target.value))}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl py-2 pl-8 pr-3 text-white font-mono font-bold text-sm focus:border-amber-400 outline-none"
-                    placeholder="10.00"
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl py-2 px-3 text-sm font-mono text-white focus:border-amber-400 outline-none"
                   />
                 </div>
 
-                {/* Quick Presets */}
-                <div className="flex gap-2 mt-1.5">
-                  {[5, 10, 25, 50, 100].map((amt) => (
-                    <button
-                      key={amt}
-                      type="button"
-                      onClick={() => setUsdAmount(amt)}
-                      className={`text-xs px-2.5 py-0.5 rounded-lg border font-mono transition cursor-pointer ${
-                        usdAmount === amt
-                          ? 'bg-amber-400/20 border-amber-400 text-amber-300'
-                          : 'bg-slate-800/80 border-slate-700 text-slate-400 hover:text-slate-200'
-                      }`}
-                    >
-                      ${amt}
-                    </button>
-                  ))}
-                </div>
-              </div>
+                {/* TxID & Sender */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-300 mb-1">
+                      Your Binance Pay ID / Sender:
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Sender Pay ID"
+                      value={senderId}
+                      onChange={(e) => setSenderId(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-700 rounded-xl py-2 px-3 text-white focus:border-amber-400 outline-none"
+                    />
+                  </div>
 
-              {/* Transaction ID */}
-              <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">
-                  3. Binance Transaction ID (TxID / Order ID): *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={txId}
-                  onChange={(e) => setTxId(e.target.value)}
-                  placeholder="e.g. BNP9842109841 or 0x..."
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl py-2 px-3 text-xs sm:text-sm text-white font-mono focus:border-amber-400 outline-none"
-                />
-              </div>
-
-              {/* Sender Binance ID */}
-              <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">
-                  4. Your Binance Pay ID / Account:
-                </label>
-                <input
-                  type="text"
-                  value={senderId}
-                  onChange={(e) => setSenderId(e.target.value)}
-                  placeholder="Your Binance Pay ID / username"
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl py-2 px-3 text-xs sm:text-sm text-white font-mono focus:border-amber-400 outline-none"
-                />
-              </div>
-
-              {/* Step 5: Screenshot Upload */}
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
-                    <ImageIcon className="w-3.5 h-3.5 text-amber-400" />
-                    <span>5. Payment Screenshot (Proof): *</span>
-                  </label>
-                  <button
-                    type="button"
-                    onClick={handleUseDemoScreenshot}
-                    className="text-[10px] text-amber-400 hover:underline cursor-pointer font-semibold"
-                  >
-                    + Use Demo Receipt
-                  </button>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-300 mb-1">
+                      Binance TxID / Order ID:
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. BNP9824109842"
+                      value={txId}
+                      onChange={(e) => setTxId(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-700 rounded-xl py-2 px-3 text-white font-mono focus:border-amber-400 outline-none uppercase"
+                    />
+                  </div>
                 </div>
 
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  accept="image/*"
-                  onChange={handleFileChange}
-                  className="hidden"
-                  id="deposit-screenshot-upload"
-                />
+                {/* Screenshot */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-bold text-slate-300">
+                      Payment Screenshot (Required for AI verification):
+                    </label>
+                  </div>
 
-                {screenshotUrl ? (
-                  <div className="relative p-2.5 rounded-xl bg-slate-950 border border-emerald-500/40 flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-3 overflow-hidden">
-                      <img
-                        src={screenshotUrl}
-                        alt="Payment Proof"
-                        className="w-14 h-14 object-cover rounded-lg border border-slate-700 shrink-0"
-                      />
-                      <div className="truncate">
-                        <span className="text-xs font-bold text-emerald-400 flex items-center gap-1">
-                          <FileCheck className="w-3.5 h-3.5" />
-                          Screenshot Attached
-                        </span>
-                        <span className="text-[10px] text-slate-400 block truncate">
-                          Admin will verify this slip to approve
-                        </span>
+                  {screenshotUrl ? (
+                    <div className="p-2 bg-slate-950 rounded-xl border border-emerald-500/40 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <img src={screenshotUrl} alt="Slip" className="w-12 h-12 object-cover rounded-lg border border-slate-800" />
+                        <span className="text-xs text-emerald-400 font-medium">Slip Attached (Fresh &lt; 30m)</span>
                       </div>
+                      <button
+                        type="button"
+                        onClick={handleRemoveScreenshot}
+                        className="text-xs text-rose-400 hover:text-rose-300 p-1"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
-
-                    <button
-                      type="button"
-                      onClick={handleRemoveScreenshot}
-                      className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 transition cursor-pointer shrink-0"
-                      title="Remove image"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                ) : (
-                  <label
-                    htmlFor="deposit-screenshot-upload"
-                    className="border-2 border-dashed border-slate-700 hover:border-amber-500/60 rounded-xl p-3.5 flex flex-col items-center justify-center gap-1 text-center cursor-pointer transition bg-slate-950/60 hover:bg-slate-950"
-                  >
-                    <Upload className="w-6 h-6 text-slate-400" />
-                    <span className="text-xs font-bold text-slate-200">
-                      Click to upload payment screenshot
-                    </span>
-                    <span className="text-[10px] text-slate-500">
-                      PNG, JPG or JPEG from Binance App (Max 5MB)
-                    </span>
-                  </label>
-                )}
-              </div>
-
-                {/* 30-Minute Strict Timestamp Rule Notification */}
-                <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/25 text-xs text-amber-300 space-y-1.5 mt-2">
-                  <div className="flex items-center justify-between font-bold text-amber-200">
-                    <span className="flex items-center gap-1.5">
-                      <Clock className="w-3.5 h-3.5 text-amber-400" />
-                      <span>30-Minute Timestamp Policy:</span>
-                    </span>
-                    <span className="text-[10px] bg-amber-500/20 px-2 py-0.5 rounded font-mono text-amber-300">
-                      Transfer Age: ~{transferAgeMinutes}m ago
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-slate-300 leading-relaxed">
-                    Your payment screenshot must be submitted within <strong>30 minutes</strong> of the Binance transfer. If your transfer is older than 30 minutes, automated verification will fail and you will need to contact the <strong>Help Desk</strong> for manual verification.
-                  </p>
+                  ) : (
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleFileChange}
+                      className="w-full text-xs text-slate-400 file:mr-2 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-slate-800 file:text-slate-200 hover:file:bg-slate-700 cursor-pointer"
+                    />
+                  )}
                 </div>
 
                 {error && (
-                  <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
+                  <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-400 text-xs flex items-center gap-2">
                     <AlertCircle className="w-4 h-4 shrink-0" />
                     <span>{error}</span>
                   </div>
@@ -446,18 +502,63 @@ export const DepositModal: React.FC<DepositModalProps> = ({
                 <button
                   type="submit"
                   disabled={isVerifyingAI}
-                  className="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-sm shadow-lg shadow-emerald-900/40 flex items-center justify-center gap-2 transition transform active:scale-98 cursor-pointer mt-2"
+                  className="w-full py-3 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-400 hover:from-amber-400 hover:to-yellow-300 text-slate-950 font-black text-sm shadow-lg flex items-center justify-center gap-2 transition cursor-pointer"
                 >
                   {isVerifyingAI ? (
-                    <span className="animate-pulse">AI Scanning Slip & Verifying...</span>
+                    <>
+                      <div className="w-4 h-4 border-2 border-slate-950 border-t-transparent rounded-full animate-spin" />
+                      <span>AI is verifying...</span>
+                    </>
                   ) : (
                     <>
                       <Send className="w-4 h-4" />
-                      <span>Submit Deposit (${usdAmount.toFixed(2)} USD)</span>
+                      <span>Submit for Instant AI Approval</span>
                     </>
                   )}
                 </button>
-            </form>
+              </form>
+            )}
+
+            {/* Recent Deposit History */}
+            {userDeposits && userDeposits.length > 0 && (
+              <div className="mt-4 pt-4 border-t border-slate-800">
+                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-2">
+                  Recent Deposit History:
+                </span>
+                <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                  {userDeposits.slice(0, 5).map((dep) => (
+                    <div
+                      key={dep.id}
+                      className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between text-xs"
+                    >
+                      <div>
+                        <div className="font-bold text-white flex items-center gap-1.5">
+                          <span>${dep.amountUSD.toFixed(2)} USD</span>
+                          {dep.depositType === 'SUPPORT_AGENT' && (
+                            <span className="text-[9px] px-1 py-0.2 rounded bg-emerald-500/20 text-emerald-400">
+                              Support
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[10px] text-slate-400 font-mono">{dep.binanceTxId}</div>
+                      </div>
+                      <span
+                        className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                          dep.status === 'APPROVED'
+                            ? 'bg-emerald-500/20 text-emerald-400'
+                            : dep.status === 'REJECTED'
+                            ? 'bg-rose-500/20 text-rose-400'
+                            : 'bg-amber-500/20 text-amber-400'
+                        }`}
+                      >
+                        {dep.status}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
           </div>
         )}
 

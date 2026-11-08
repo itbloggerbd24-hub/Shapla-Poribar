@@ -17,19 +17,20 @@ interface DailyRewardsModalProps {
   isOpen: boolean;
   onClose: () => void;
   user: UserProfile;
-  onClaimDaily: () => void;
   onClaimWeekly: () => void;
+  onClaimMonthly: () => void;
+  onClaimDaily?: () => void;
 }
 
-const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+const ONE_MONTH_MS = 30 * 24 * 60 * 60 * 1000;
 
 export const DailyRewardsModal: React.FC<DailyRewardsModalProps> = ({
   isOpen,
   onClose,
   user,
-  onClaimDaily,
   onClaimWeekly,
+  onClaimMonthly,
 }) => {
   const [now, setNow] = useState(Date.now());
 
@@ -41,45 +42,49 @@ export const DailyRewardsModal: React.FC<DailyRewardsModalProps> = ({
 
   if (!isOpen) return null;
 
-  const lastDaily = user.lastDailyClaim || 0;
   const lastWeekly = user.lastWeeklyClaim || 0;
+  const lastMonthly = user.lastMonthlyClaim || 0;
 
-  const dailyEligible = (now - lastDaily) >= ONE_DAY_MS;
   const weeklyEligible = (now - lastWeekly) >= ONE_WEEK_MS;
+  const monthlyEligible = (now - lastMonthly) >= ONE_MONTH_MS;
 
-  const dailyRemainingMs = Math.max(0, ONE_DAY_MS - (now - lastDaily));
   const weeklyRemainingMs = Math.max(0, ONE_WEEK_MS - (now - lastWeekly));
+  const monthlyRemainingMs = Math.max(0, ONE_MONTH_MS - (now - lastMonthly));
 
   const formatRemaining = (ms: number) => {
     const totalSeconds = Math.floor(ms / 1000);
-    const hours = Math.floor(totalSeconds / 3600);
+    const days = Math.floor(totalSeconds / 86400);
+    const hours = Math.floor((totalSeconds % 86400) / 3600);
     const minutes = Math.floor((totalSeconds % 3600) / 60);
     const seconds = totalSeconds % 60;
+    if (days > 0) {
+      return `${days}d ${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    }
     return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-  };
-
-  const handleClaimDailyClick = () => {
-    if (!dailyEligible) return;
-    confetti({
-      particleCount: 80,
-      spread: 70,
-      origin: { y: 0.6 },
-      colors: ['#10b981', '#f59e0b', '#3b82f6'],
-    });
-    soundManager.playWin();
-    onClaimDaily();
   };
 
   const handleClaimWeeklyClick = () => {
     if (!weeklyEligible) return;
     confetti({
-      particleCount: 120,
-      spread: 90,
+      particleCount: 90,
+      spread: 75,
+      origin: { y: 0.6 },
+      colors: ['#10b981', '#f59e0b', '#3b82f6'],
+    });
+    soundManager.playWin();
+    onClaimWeekly();
+  };
+
+  const handleClaimMonthlyClick = () => {
+    if (!monthlyEligible) return;
+    confetti({
+      particleCount: 140,
+      spread: 95,
       origin: { y: 0.6 },
       colors: ['#f59e0b', '#ec4899', '#8b5cf6', '#10b981'],
     });
     soundManager.playWin();
-    onClaimWeekly();
+    onClaimMonthly();
   };
 
   return (
@@ -99,7 +104,7 @@ export const DailyRewardsModal: React.FC<DailyRewardsModalProps> = ({
                 <span>Free Reward Center</span>
                 <Sparkles className="w-4 h-4 text-amber-400" />
               </h2>
-              <p className="text-xs text-slate-400">Claim your recurring daily & weekly free prediction cash</p>
+              <p className="text-xs text-slate-400">Claim your free recurring Weekly & Monthly Bonuses</p>
             </div>
           </div>
           <button
@@ -112,9 +117,9 @@ export const DailyRewardsModal: React.FC<DailyRewardsModalProps> = ({
 
         <div className="mt-5 space-y-4">
           
-          {/* Card 1: Daily Free Bonus ($0.50 USD) */}
+          {/* Card 1: Weekly Free Bonus ($0.50 USD) */}
           <div className={`p-4 rounded-2xl border transition ${
-            dailyEligible
+            weeklyEligible
               ? 'bg-gradient-to-br from-amber-500/15 via-slate-900 to-slate-950 border-amber-500/60 shadow-lg ring-1 ring-amber-500/30'
               : 'bg-slate-950/70 border-slate-800'
           }`}>
@@ -124,8 +129,8 @@ export const DailyRewardsModal: React.FC<DailyRewardsModalProps> = ({
                   <Flame className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-black text-white">Daily Bonus</h3>
-                  <span className="text-[10px] text-slate-400">Resets every 24 hours</span>
+                  <h3 className="text-sm font-black text-white">Weekly Bonus</h3>
+                  <span className="text-[10px] text-slate-400">Can be claimed once every 7 days</span>
                 </div>
               </div>
               <div className="text-base font-black text-amber-300 font-mono">
@@ -134,17 +139,17 @@ export const DailyRewardsModal: React.FC<DailyRewardsModalProps> = ({
             </div>
 
             <p className="text-xs text-slate-300 leading-relaxed mb-3">
-              Free credit added straight to your balance for placing coin toss bets.
+              Weekly free wagering credits credited directly to your playable balance.
             </p>
 
-            {dailyEligible ? (
+            {weeklyEligible ? (
               <button
                 type="button"
-                onClick={handleClaimDailyClick}
+                onClick={handleClaimWeeklyClick}
                 className="w-full py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-400 hover:from-amber-400 hover:to-yellow-300 text-slate-950 font-black text-xs shadow-md transition transform active:scale-98 cursor-pointer flex items-center justify-center gap-1.5"
               >
                 <Sparkles className="w-4 h-4 text-slate-950" />
-                <span>Claim $0.50 Daily Free Bonus</span>
+                <span>Claim $0.50 Weekly Free Bonus</span>
               </button>
             ) : (
               <div className="w-full py-2 px-3 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 text-xs flex items-center justify-between font-mono">
@@ -152,15 +157,15 @@ export const DailyRewardsModal: React.FC<DailyRewardsModalProps> = ({
                   <Clock className="w-3.5 h-3.5" /> Next claim in:
                 </span>
                 <span className="font-bold text-amber-400">
-                  {formatRemaining(dailyRemainingMs)}
+                  {formatRemaining(weeklyRemainingMs)}
                 </span>
               </div>
             )}
           </div>
 
-          {/* Card 2: Weekly Free Bonus ($1.00 USD) */}
+          {/* Card 2: Monthly Free Bonus ($1.00 USD) */}
           <div className={`p-4 rounded-2xl border transition ${
-            weeklyEligible
+            monthlyEligible
               ? 'bg-gradient-to-br from-emerald-500/15 via-slate-900 to-slate-950 border-emerald-500/60 shadow-lg ring-1 ring-emerald-500/30'
               : 'bg-slate-950/70 border-slate-800'
           }`}>
@@ -170,8 +175,8 @@ export const DailyRewardsModal: React.FC<DailyRewardsModalProps> = ({
                   <Calendar className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-black text-white">Weekly Loyalty Bonus</h3>
-                  <span className="text-[10px] text-slate-400">Resets every 7 days</span>
+                  <h3 className="text-sm font-black text-white">Monthly Loyalty Bonus</h3>
+                  <span className="text-[10px] text-slate-400">Can be claimed once every 30 days</span>
                 </div>
               </div>
               <div className="text-base font-black text-emerald-400 font-mono">
@@ -180,17 +185,17 @@ export const DailyRewardsModal: React.FC<DailyRewardsModalProps> = ({
             </div>
 
             <p className="text-xs text-slate-300 leading-relaxed mb-3">
-              Weekly loyalty gift awarded to all active Shapla Poribar players.
+              Monthly loyalty gift accessible to all active players.
             </p>
 
-            {weeklyEligible ? (
+            {monthlyEligible ? (
               <button
                 type="button"
-                onClick={handleClaimWeeklyClick}
+                onClick={handleClaimMonthlyClick}
                 className="w-full py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs shadow-md transition transform active:scale-98 cursor-pointer flex items-center justify-center gap-1.5"
               >
                 <Sparkles className="w-4 h-4 text-white" />
-                <span>Claim $1.00 Weekly Bonus</span>
+                <span>Claim $1.00 Monthly Bonus</span>
               </button>
             ) : (
               <div className="w-full py-2 px-3 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 text-xs flex items-center justify-between font-mono">
@@ -198,7 +203,7 @@ export const DailyRewardsModal: React.FC<DailyRewardsModalProps> = ({
                   <Clock className="w-3.5 h-3.5" /> Next claim in:
                 </span>
                 <span className="font-bold text-emerald-400">
-                  {formatRemaining(weeklyRemainingMs)}
+                  {formatRemaining(monthlyRemainingMs)}
                 </span>
               </div>
             )}

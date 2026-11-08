@@ -226,8 +226,8 @@ export const authApi = {
     return getLocalUsers();
   },
 
-  // Claim Daily or Weekly Bonus (Server persistent)
-  async claimBonus(userId: string, type: 'daily' | 'weekly'): Promise<{ success: boolean; user?: UserProfile; error?: string }> {
+  // Claim Weekly or Monthly Bonus (Server persistent)
+  async claimBonus(userId: string, type: 'weekly' | 'monthly' | 'daily'): Promise<{ success: boolean; user?: UserProfile; error?: string }> {
     try {
       const res = await fetch(`${API_BASE}/users/${userId}/claim-bonus`, {
         method: 'POST',
@@ -364,6 +364,75 @@ export const authApi = {
       return res.ok;
     } catch (e) {
       return false;
+    }
+  },
+
+  // Settings & Quick Notice API
+  async fetchSettings(): Promise<any | null> {
+    try {
+      const res = await fetch(`${API_BASE}/settings`);
+      if (res.ok) {
+        const json = await res.json();
+        return json.settings || null;
+      }
+    } catch (e) {
+      // ignore
+    }
+    return null;
+  },
+
+  async updateSettings(settings: any): Promise<{ success: boolean; settings?: any; error?: string }> {
+    try {
+      const res = await fetch(`${API_BASE}/settings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(settings),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        return { success: false, error: json.error || 'Failed to update settings' };
+      }
+      return { success: true, settings: json.settings };
+    } catch (e) {
+      return { success: false, error: 'Network error saving settings' };
+    }
+  },
+
+  // Notifications API
+  async fetchNotifications(userId?: string): Promise<any[]> {
+    try {
+      const url = userId ? `${API_BASE}/notifications?userId=${encodeURIComponent(userId)}` : `${API_BASE}/notifications`;
+      const res = await fetch(url);
+      if (res.ok) {
+        const json = await res.json();
+        return json.notifications || [];
+      }
+    } catch (e) {
+      // ignore
+    }
+    return [];
+  },
+
+  async publishNotification(data: {
+    title: string;
+    message: string;
+    badge?: string;
+    type?: string;
+    userId?: string;
+  }): Promise<{ success: boolean; notification?: any; quickNotice?: any; error?: string }> {
+    try {
+      const res = await fetch(`${API_BASE}/notifications`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        return { success: false, error: json.error || 'Failed to publish notice' };
+      }
+      return { success: true, notification: json.notification, quickNotice: json.quickNotice };
+    } catch (e) {
+      return { success: false, error: 'Network error publishing notice' };
     }
   }
 };

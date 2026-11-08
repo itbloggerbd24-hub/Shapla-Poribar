@@ -25,7 +25,12 @@ import {
   X,
   UserX,
   UserCheck,
-  ShieldAlert
+  ShieldAlert,
+  Megaphone,
+  Bell,
+  Smartphone,
+  Plus,
+  Trash2
 } from 'lucide-react';
 
 interface AdminPanelProps {
@@ -42,6 +47,7 @@ interface AdminPanelProps {
   users: UserProfile[];
   onAdjustUserBalance: (userId: string, newBalance: number) => void;
   onToggleSuspendUser?: (userId: string, isSuspended: boolean, reason?: string) => void;
+  onPublishNotice?: (title: string, message: string, badge?: string) => Promise<boolean | void>;
   onCloseAdmin: () => void;
 }
 
@@ -58,11 +64,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   users,
   onAdjustUserBalance,
   onToggleSuspendUser,
+  onPublishNotice,
   onCloseAdmin,
 }) => {
-  const [activeTab, setActiveTab] = useState<'DEPOSITS' | 'WITHDRAWALS' | 'SETTINGS' | 'USERS'>('DEPOSITS');
+  const [activeTab, setActiveTab] = useState<'DEPOSITS' | 'WITHDRAWALS' | 'NOTICES' | 'SETTINGS' | 'USERS'>('DEPOSITS');
   const [editableSettings, setEditableSettings] = useState<AdminSettings>(settings);
   const [settingsSaved, setSettingsSaved] = useState<boolean>(false);
+  const [noticePublished, setNoticePublished] = useState<boolean>(false);
   
   // User balance adjustment state
   const [userSearch, setUserSearch] = useState('');
@@ -226,6 +234,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         </button>
 
         <button
+          onClick={() => setActiveTab('NOTICES')}
+          className={`py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 transition cursor-pointer whitespace-nowrap ${
+            activeTab === 'NOTICES'
+              ? 'bg-amber-500 text-slate-950 font-black'
+              : 'bg-slate-900 text-slate-400 hover:text-white'
+          }`}
+        >
+          <Megaphone className="w-4 h-4" />
+          <span>Quick Notice</span>
+          {editableSettings.quickNotice?.enabled && (
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+          )}
+        </button>
+
+        <button
           onClick={() => setActiveTab('SETTINGS')}
           className={`py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 transition cursor-pointer whitespace-nowrap ${
             activeTab === 'SETTINGS'
@@ -313,12 +336,28 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         )}
                       </td>
                       <td className="py-3 px-3">
-                        <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-300 text-[10px] font-bold block w-fit">
-                          {dep.network}
-                        </span>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold block w-fit ${
+                            dep.depositType === 'SUPPORT_AGENT'
+                              ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                              : 'bg-slate-800 text-slate-300'
+                          }`}>
+                            {dep.depositType === 'SUPPORT_AGENT' ? '👨‍💼 Support Agent' : dep.network}
+                          </span>
+                          {dep.supportMethodName && (
+                            <span className="text-[10px] font-bold text-amber-300 block">
+                              {dep.supportMethodName}
+                            </span>
+                          )}
+                        </div>
                         <span className="text-[10px] text-slate-400 font-mono mt-0.5 block">
                           Sender: {dep.senderBinanceId}
                         </span>
+                        {dep.userNote && (
+                          <span className="text-[10px] text-slate-300 italic block mt-0.5 bg-slate-950/80 px-1.5 py-0.5 rounded">
+                            "{dep.userNote}"
+                          </span>
+                        )}
                       </td>
                       <td className="py-3 px-3 font-mono text-amber-300 select-all">
                         {dep.binanceTxId}
@@ -468,7 +507,182 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         </div>
       )}
 
-      {/* Tab 3: SETTINGS & CONFIG */}
+      {/* Tab 3: QUICK NOTICES & ANNOUNCEMENT BOARD */}
+      {activeTab === 'NOTICES' && (
+        <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 sm:p-6 shadow-xl space-y-6">
+          <div className="flex items-center justify-between pb-4 border-b border-slate-800">
+            <div>
+              <div className="flex items-center gap-2">
+                <Megaphone className="w-5 h-5 text-amber-400" />
+                <h3 className="text-base font-black text-white">Quick Notification & Announcement Board</h3>
+              </div>
+              <p className="text-xs text-slate-400">
+                Publish announcements and notice alerts instantly to all connected users and notification modals.
+              </p>
+            </div>
+            {noticePublished && (
+              <span className="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 text-xs font-bold animate-pulse">
+                ✓ Notice published successfully!
+              </span>
+            )}
+          </div>
+
+          <div className="space-y-4">
+            {/* Banner Toggle Switch */}
+            <div className="flex items-center justify-between p-3.5 rounded-2xl bg-slate-950 border border-slate-800">
+              <div>
+                <span className="text-xs font-bold text-white block">
+                  Show Notice Banner on Website
+                </span>
+                <span className="text-[11px] text-slate-400 block">
+                  When enabled, an animated announcement bar is shown below the navigation header.
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditableSettings((prev) => ({
+                    ...prev,
+                    quickNotice: {
+                      ...(prev.quickNotice || { title: '', message: '', badge: 'NOTICE' }),
+                      enabled: !prev.quickNotice?.enabled,
+                      updatedAt: Date.now(),
+                    },
+                  }));
+                }}
+                className={`w-12 h-6 flex items-center rounded-full p-1 cursor-pointer transition ${
+                  editableSettings.quickNotice?.enabled ? 'bg-emerald-500 justify-end' : 'bg-slate-700 justify-start'
+                }`}
+              >
+                <div className="bg-white w-4 h-4 rounded-full shadow" />
+              </button>
+            </div>
+
+            {/* Badge Selector */}
+            <div>
+              <label className="block text-xs font-bold text-slate-300 mb-1.5 uppercase tracking-wider">
+                Notice Badge / Category:
+              </label>
+              <div className="flex flex-wrap gap-2 text-xs">
+                {['NOTICE', 'BONUS OFFER', 'URGENT', 'MAINTENANCE', 'DEPOSIT UPDATE'].map((b) => (
+                  <button
+                    key={b}
+                    type="button"
+                    onClick={() => {
+                      setEditableSettings((prev) => ({
+                        ...prev,
+                        quickNotice: {
+                          ...(prev.quickNotice || { title: '', message: '', enabled: true }),
+                          badge: b,
+                          updatedAt: Date.now(),
+                        },
+                      }));
+                    }}
+                    className={`py-1.5 px-3 rounded-xl font-bold border transition cursor-pointer ${
+                      (editableSettings.quickNotice?.badge || 'NOTICE') === b
+                        ? 'bg-amber-500/20 border-amber-400 text-amber-300'
+                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    {b}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Title */}
+            <div>
+              <label className="block text-xs font-bold text-slate-300 mb-1">
+                Notice Title:
+              </label>
+              <input
+                type="text"
+                placeholder="e.g. Important Deposit Instructions or Special Weekend Bonus!"
+                value={editableSettings.quickNotice?.title || ''}
+                onChange={(e) => {
+                  setEditableSettings((prev) => ({
+                    ...prev,
+                    quickNotice: {
+                      ...(prev.quickNotice || { enabled: true, badge: 'NOTICE' }),
+                      title: e.target.value,
+                      updatedAt: Date.now(),
+                    },
+                  }));
+                }}
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl py-2.5 px-3 text-sm text-white focus:border-amber-400 outline-none"
+              />
+            </div>
+
+            {/* Message Details */}
+            <div>
+              <label className="block text-xs font-bold text-slate-300 mb-1">
+                Notice Message:
+              </label>
+              <textarea
+                rows={4}
+                placeholder="Enter detailed notice message here..."
+                value={editableSettings.quickNotice?.message || ''}
+                onChange={(e) => {
+                  setEditableSettings((prev) => ({
+                    ...prev,
+                    quickNotice: {
+                      ...(prev.quickNotice || { enabled: true, badge: 'NOTICE', title: '' }),
+                      message: e.target.value,
+                      updatedAt: Date.now(),
+                    },
+                  }));
+                }}
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white focus:border-amber-400 outline-none leading-relaxed"
+              />
+            </div>
+
+            {/* Live Preview Card */}
+            <div>
+              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-2">
+                User Live Preview:
+              </span>
+              <div className="p-4 rounded-2xl bg-slate-950 border border-amber-500/30 space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="px-2 py-0.5 rounded-md bg-amber-400 text-slate-950 font-black text-[9px] uppercase">
+                    {editableSettings.quickNotice?.badge || 'NOTICE'}
+                  </span>
+                  <span className="text-xs font-bold text-amber-300">
+                    {editableSettings.quickNotice?.title || 'Notice Title'}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-300 whitespace-pre-line leading-relaxed pt-1">
+                  {editableSettings.quickNotice?.message || 'Your notice message will appear here...'}
+                </p>
+              </div>
+            </div>
+
+            {/* Publish Action Button */}
+            <div className="pt-2 flex justify-end">
+              <button
+                type="button"
+                onClick={async () => {
+                  onUpdateSettings(editableSettings);
+                  if (onPublishNotice && editableSettings.quickNotice) {
+                    await onPublishNotice(
+                      editableSettings.quickNotice.title || 'Official Notice',
+                      editableSettings.quickNotice.message || '',
+                      editableSettings.quickNotice.badge || 'NOTICE'
+                    );
+                  }
+                  setNoticePublished(true);
+                  setTimeout(() => setNoticePublished(false), 3000);
+                }}
+                className="px-6 py-3 rounded-xl bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 hover:from-amber-400 hover:to-yellow-300 text-slate-950 font-black text-xs sm:text-sm shadow-xl flex items-center gap-2 transition cursor-pointer"
+              >
+                <Megaphone className="w-4 h-4" />
+                <span>Publish Notice to Website</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Tab 4: SETTINGS & CONFIG */}
       {activeTab === 'SETTINGS' && (
         <form onSubmit={handleSaveSettings} className="bg-slate-900 border border-slate-800 rounded-3xl p-5 sm:p-6 shadow-xl space-y-6">
           <div className="flex items-center justify-between pb-4 border-b border-slate-800">
@@ -583,6 +797,165 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               </span>
             </div>
 
+          </div>
+
+          {/* Support Agent Payment Accounts Section */}
+          <div className="p-4 rounded-2xl bg-emerald-500/5 border border-emerald-500/20 space-y-4">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+              <div className="flex items-center gap-2">
+                <Smartphone className="w-4 h-4 text-emerald-400" />
+                <h4 className="text-xs font-black text-emerald-300 uppercase tracking-wider">
+                  Support Payment Accounts & Deposit Methods:
+                </h4>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  const newMethod = {
+                    id: `sp_custom_${Date.now()}`,
+                    name: 'New Binance / USDT Method',
+                    accountNumber: '849204918',
+                    accountType: 'Binance Pay ID',
+                    instructions: 'Transfer funds to this account and submit your TxID and screenshot.',
+                    isActive: true,
+                  };
+                  setEditableSettings((prev) => ({
+                    ...prev,
+                    supportPaymentMethods: [...(prev.supportPaymentMethods || []), newMethod],
+                  }));
+                }}
+                className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] flex items-center gap-1 cursor-pointer transition shadow"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add Account</span>
+              </button>
+            </div>
+
+            <p className="text-[11px] text-slate-400">
+              Users will see these active Binance and USDT addresses and instructions when opening Live Support Deposit.
+            </p>
+
+            <div className="space-y-3">
+              {(editableSettings.supportPaymentMethods || []).map((method, idx) => (
+                <div
+                  key={method.id || idx}
+                  className="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-2 text-xs"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <input
+                      type="text"
+                      value={method.name}
+                      onChange={(e) => {
+                        const updated = [...(editableSettings.supportPaymentMethods || [])];
+                        updated[idx].name = e.target.value;
+                        setEditableSettings({ ...editableSettings, supportPaymentMethods: updated });
+                      }}
+                      className="bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 font-bold text-white text-xs flex-1 focus:border-emerald-400 outline-none"
+                    />
+
+                    <label className="flex items-center gap-1.5 cursor-pointer text-[11px] text-slate-300 font-semibold select-none">
+                      <input
+                        type="checkbox"
+                        checked={method.isActive}
+                        onChange={(e) => {
+                          const updated = [...(editableSettings.supportPaymentMethods || [])];
+                          updated[idx].isActive = e.target.checked;
+                          setEditableSettings({ ...editableSettings, supportPaymentMethods: updated });
+                        }}
+                        className="rounded accent-emerald-500"
+                      />
+                      <span>Active</span>
+                    </label>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const updated = (editableSettings.supportPaymentMethods || []).filter((_, i) => i !== idx);
+                        setEditableSettings({ ...editableSettings, supportPaymentMethods: updated });
+                      }}
+                      className="p-1 rounded text-rose-400 hover:text-rose-300 hover:bg-slate-900 transition"
+                      title="Delete"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div>
+                      <span className="text-[10px] text-slate-400 block mb-0.5">Account Number / Pay ID:</span>
+                      <input
+                        type="text"
+                        value={method.accountNumber}
+                        onChange={(e) => {
+                          const updated = [...(editableSettings.supportPaymentMethods || [])];
+                          updated[idx].accountNumber = e.target.value;
+                          setEditableSettings({ ...editableSettings, supportPaymentMethods: updated });
+                        }}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 font-mono text-amber-300 text-xs focus:border-emerald-400 outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <span className="text-[10px] text-slate-400 block mb-0.5">Type:</span>
+                      <input
+                        type="text"
+                        value={method.accountType || ''}
+                        placeholder="Binance Pay / Crypto TRC-20 / BEP-20"
+                        onChange={(e) => {
+                          const updated = [...(editableSettings.supportPaymentMethods || [])];
+                          updated[idx].accountType = e.target.value;
+                          setEditableSettings({ ...editableSettings, supportPaymentMethods: updated });
+                        }}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-slate-300 text-xs focus:border-emerald-400 outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <span className="text-[10px] text-slate-400 block mb-0.5">Payment Instructions:</span>
+                    <input
+                      type="text"
+                      value={method.instructions}
+                      onChange={(e) => {
+                        const updated = [...(editableSettings.supportPaymentMethods || [])];
+                        updated[idx].instructions = e.target.value;
+                        setEditableSettings({ ...editableSettings, supportPaymentMethods: updated });
+                      }}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-slate-300 text-xs focus:border-emerald-400 outline-none"
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Support Agent Helpline Links */}
+            <div className="pt-2 border-t border-slate-800 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">
+                  Admin WhatsApp Helpline:
+                </label>
+                <input
+                  type="text"
+                  placeholder="+8801899999999"
+                  value={editableSettings.supportContactWhatsapp || ''}
+                  onChange={(e) => setEditableSettings({ ...editableSettings, supportContactWhatsapp: e.target.value })}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl py-2 px-3 text-white font-mono focus:border-emerald-400 outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">
+                  Admin Telegram Username / Link:
+                </label>
+                <input
+                  type="text"
+                  placeholder="ShaplaPoribarSupport"
+                  value={editableSettings.supportContactTelegram || ''}
+                  onChange={(e) => setEditableSettings({ ...editableSettings, supportContactTelegram: e.target.value })}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl py-2 px-3 text-white font-mono focus:border-emerald-400 outline-none"
+                />
+              </div>
+            </div>
           </div>
 
           {/* Secret Algorithm Mode Override */}

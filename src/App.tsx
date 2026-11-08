@@ -8,7 +8,8 @@ import {
   Round, 
   UserProfile, 
   WithdrawalRequest,
-  RankedPlayer
+  RankedPlayer,
+  AppNotification
 } from './types/game';
 import { 
   DEFAULT_ADMIN_SETTINGS, 
@@ -34,6 +35,7 @@ import { HelpDeskModal } from './components/HelpDeskModal';
 import { AuthPage } from './components/AuthPage';
 import { ReferralModal } from './components/ReferralModal';
 import { DailyRewardsModal } from './components/DailyRewardsModal';
+import { NotificationModal } from './components/NotificationModal';
 import { authApi } from './utils/authApi';
 import { checkWithdrawalHours } from './utils/withdrawalHours';
 import { 
@@ -95,6 +97,10 @@ export default function App() {
   const [isRulesOpen, setIsRulesOpen] = useState<boolean>(false);
   const [isReferralOpen, setIsReferralOpen] = useState<boolean>(false);
   const [isRewardsOpen, setIsRewardsOpen] = useState<boolean>(false);
+  const [isNotificationOpen, setIsNotificationOpen] = useState<boolean>(false);
+  const [notifications, setNotifications] = useState<AppNotification[]>(() => 
+    loadFromStorage('notifications_data_usd', [])
+  );
   const [isMuted, setIsMuted] = useState<boolean>(soundManager.getMuted());
   const [winNotification, setWinNotification] = useState<{ amount: number; option: OptionType } | null>(null);
 
@@ -113,13 +119,14 @@ export default function App() {
   useEffect(() => { saveToStorage('rankings_data_usd', rankings); }, [rankings]);
   useEffect(() => { saveToStorage('all_bets_usd', allBets); }, [allBets]);
   useEffect(() => { saveToStorage('all_users_usd', allUsers); }, [allUsers]);
+  useEffect(() => { saveToStorage('notifications_data_usd', notifications); }, [notifications]);
   useEffect(() => {
     if (currentUser) {
       saveToStorage('active_user_session', user);
     }
   }, [user, currentUser]);
 
-  // Sync users database, deposits, and withdrawals on mount from backend
+  // Sync users database, deposits, withdrawals, settings, and notifications on mount from backend
   useEffect(() => {
     authApi.fetchUsers().then((fetched) => {
       if (fetched && fetched.length > 0) {
@@ -146,7 +153,35 @@ export default function App() {
         setWithdrawals(fetchedWths);
       }
     });
-  }, []);
+
+    authApi.fetchSettings().then((fetchedSettings) => {
+      if (fetchedSettings) {
+        setAdminSettings((prev) => ({ ...prev, ...fetchedSettings }));
+      }
+    });
+
+    authApi.fetchNotifications(currentUser?.id).then((fetchedNotifs) => {
+      if (fetchedNotifs && fetchedNotifs.length > 0) {
+        setNotifications(fetchedNotifs);
+      }
+    });
+  }, [currentUser?.id]);
+
+  const handlePublishNotice = async (title: string, message: string, badge?: string) => {
+    const res = await authApi.publishNotification({
+      title,
+      message,
+      badge: badge || 'NOTICE',
+      type: 'ADMIN_NOTICE',
+      userId: 'all',
+    });
+    if (res.success && res.notification) {
+      setNotifications((prev) => [res.notification, ...prev]);
+      if (res.quickNotice) {
+        setAdminSettings((prev) => ({ ...prev, quickNotice: res.quickNotice }));
+      }
+    }
+  };
 
   const handleLoginSuccess = (loggedInUser: UserProfile) => {
     setUser(loggedInUser);
@@ -210,30 +245,7 @@ export default function App() {
     }
   };
 
-  // Claim Daily Free Bonus ($0.50 USD every 24h) - Persists on server and local
-  const handleClaimDaily = async () => {
-    if (user?.id) {
-      const res = await authApi.claimBonus(user.id, 'daily');
-      if (res.success && res.user) {
-        setUser(res.user);
-        setCurrentUser(res.user);
-        saveToStorage('active_user_session', res.user);
-        setAllUsers((prev) => prev.map((u) => (u.id === res.user!.id ? res.user! : u)));
-        return;
-      }
-    }
-    setUser((u) => {
-      const next = {
-        ...u,
-        walletBalance: Number((u.walletBalance + 0.50).toFixed(2)),
-        lastDailyClaim: Date.now(),
-      };
-      saveToStorage('active_user_session', next);
-      return next;
-    });
-  };
-
-  // Claim Weekly Free Bonus ($1.00 USD every 7 days) - Persists on server and local
+  // Claim Weekly Free Bonus ($0.50 USD every 7 days) - Persists on server and local
   const handleClaimWeekly = async () => {
     if (user?.id) {
       const res = await authApi.claimBonus(user.id, 'weekly');
@@ -248,8 +260,31 @@ export default function App() {
     setUser((u) => {
       const next = {
         ...u,
-        walletBalance: Number((u.walletBalance + 1.00).toFixed(2)),
+        walletBalance: Number((u.walletBalance + 0.50).toFixed(2)),
         lastWeeklyClaim: Date.now(),
+      };
+      saveToStorage('active_user_session', next);
+      return next;
+    });
+  };
+
+  // Claim Monthly Free Loyalty Bonus ($1.00 USD every 30 days) - Persists on server and local
+  const handleClaimMonthly = async () => {
+    if (user?.id) {
+      const res = await authApi.claimBonus(user.id, 'monthly');
+      if (res.success && res.user) {
+        setUser(res.user);
+        setCurrentUser(res.user);
+        saveToStorage('active_user_session', res.user);
+        setAllUsers((prev) => prev.map((u) => (u.id === res.user!.id ? res.user! : u)));
+        return;
+      }
+    }
+    setUser((u) => {
+      const next = {
+        ...u,
+        walletBalance: Number((u.walletBalance + 1.00).toFixed(2)),
+        lastMonthlyClaim: Date.now(),
       };
       saveToStorage('active_user_session', next);
       return next;
@@ -459,6 +494,12 @@ export default function App() {
     if (amount < 0.20) return;
     if (amount > user.walletBalance) return;
 
+    // Strict rule: cannot bet on both sides in the same round
+    const existingOppositeBet = allBets.some(
+      (b) => b.roundId === currentRound.id && b.userId === user.id && b.option !== option
+    );
+    if (existingOppositeBet) return;
+
     const roundedAmount = Number(amount.toFixed(2));
     const nextBal = Number((user.walletBalance - roundedAmount).toFixed(2));
     authApi.syncBalance(user.id, { walletBalance: nextBal });
@@ -500,15 +541,19 @@ export default function App() {
     }));
   };
 
-  // Deposit Submit Handler with Automated AI Verification & Timestamp Checking
+  // Deposit Submit Handler (Support Agent or Automated AI Verification)
   const handleSubmitDeposit = async (data: {
     amountUSD: number;
     binanceTxId: string;
     senderBinanceId: string;
-    network: 'BINANCE_PAY' | 'USDT_BEP20' | 'USDT_TRC20';
+    network?: string;
+    depositType?: 'AI_BINANCE' | 'SUPPORT_AGENT';
+    supportMethodName?: string;
     screenshotUrl?: string;
+    userNote?: string;
   }) => {
-    const isAutoApproved = data.amountUSD >= adminSettings.minDepositUSD && Boolean(data.screenshotUrl);
+    const isSupportAgent = data.depositType === 'SUPPORT_AGENT';
+    const isAutoApproved = !isSupportAgent && data.amountUSD >= adminSettings.minDepositUSD && Boolean(data.screenshotUrl);
 
     const newDeposit: DepositRequest = {
       id: `DEP-${Math.floor(1000 + Math.random() * 9000)}`,
@@ -517,7 +562,10 @@ export default function App() {
       amountUSD: data.amountUSD,
       binanceTxId: data.binanceTxId,
       senderBinanceId: data.senderBinanceId,
-      network: data.network,
+      network: (data.network as any) || 'BINANCE_PAY',
+      depositType: data.depositType || (isSupportAgent ? 'SUPPORT_AGENT' : 'AI_BINANCE'),
+      supportMethodName: data.supportMethodName,
+      userNote: data.userNote,
       screenshotUrl: data.screenshotUrl,
       status: isAutoApproved ? 'APPROVED' : 'PENDING',
       aiVerified: isAutoApproved,
@@ -541,8 +589,12 @@ export default function App() {
         setAllUsers((users) =>
           users.map((u) => (u.id === res.user!.id ? res.user! : u))
         );
-        return;
       }
+      // Refresh notifications for any welcome or deposit alerts
+      authApi.fetchNotifications(user.id).then((notifs) => {
+        if (notifs) setNotifications(notifs);
+      });
+      return;
     } catch (e) {
       setDeposits((prev) => [newDeposit, ...prev]);
     }
@@ -623,20 +675,37 @@ export default function App() {
 
   // Admin Approve Deposit
   const handleApproveDeposit = async (depositId: string) => {
-    await authApi.approveDeposit(depositId);
+    const isApproved = await authApi.approveDeposit(depositId);
+    if (isApproved) {
+      const updatedUsers = await authApi.fetchUsers();
+      if (updatedUsers && updatedUsers.length > 0) {
+        setAllUsers(updatedUsers);
+        const me = updatedUsers.find((u) => u.id === user.id);
+        if (me) {
+          setUser(me);
+          saveToStorage('active_user_session', me);
+        }
+      }
+      authApi.fetchNotifications(user.id).then((notifs) => {
+        if (notifs) setNotifications(notifs);
+      });
+    }
+
     setDeposits((prev) =>
       prev.map((d) => {
         if (d.id === depositId && d.status === 'PENDING') {
-          if (d.userId === user.id) {
-            setUser((u) => {
-              const next = { ...u, walletBalance: Number((u.walletBalance + d.amountUSD).toFixed(2)) };
-              saveToStorage('active_user_session', next);
-              return next;
-            });
+          if (!isApproved) {
+            if (d.userId === user.id) {
+              setUser((u) => {
+                const next = { ...u, walletBalance: Number((u.walletBalance + d.amountUSD).toFixed(2)) };
+                saveToStorage('active_user_session', next);
+                return next;
+              });
+            }
+            setAllUsers((users) =>
+              users.map((u) => (u.id === d.userId ? { ...u, walletBalance: Number((u.walletBalance + d.amountUSD).toFixed(2)) } : u))
+            );
           }
-          setAllUsers((users) =>
-            users.map((u) => (u.id === d.userId ? { ...u, walletBalance: Number((u.walletBalance + d.amountUSD).toFixed(2)) } : u))
-          );
           return { ...d, status: 'APPROVED', updatedAt: Date.now() };
         }
         return d;
@@ -811,7 +880,12 @@ export default function App() {
           </div>
         </div>
 
-        <HelpDeskModal />
+        <HelpDeskModal
+          user={currentUser}
+          adminSettings={adminSettings}
+          onSubmitDeposit={handleSubmitDeposit}
+          onApproveDeposit={handleApproveDeposit}
+        />
       </div>
     );
   }
@@ -819,7 +893,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-['Plus_Jakarta_Sans',sans-serif]">
       
-      {/* Header (No Admin Button visible anywhere) */}
+      {/* Header (Quick Notification Icon replaces sound on header bar) */}
       <Header
         user={user}
         onOpenDeposit={() => setIsDepositOpen(true)}
@@ -827,6 +901,15 @@ export default function App() {
         onOpenRules={() => setIsRulesOpen(true)}
         onOpenReferral={() => setIsReferralOpen(true)}
         onOpenRewards={() => setIsRewardsOpen(true)}
+        onOpenNotifications={() => {
+          setIsNotificationOpen(true);
+          setNotifications((prev) => {
+            const updated = prev.map((n) => ({ ...n, isRead: true }));
+            saveToStorage('notifications_data_usd', updated);
+            return updated;
+          });
+        }}
+        unreadNoticeCount={notifications.filter((n) => !n.isRead).length}
         isMuted={isMuted}
         onToggleSound={handleToggleSound}
         onLogoClick={handleLogoClick}
@@ -868,6 +951,7 @@ export default function App() {
             users={allUsers}
             onAdjustUserBalance={handleAdjustUserBalance}
             onToggleSuspendUser={handleToggleSuspendUser}
+            onPublishNotice={handlePublishNotice}
             onCloseAdmin={() => {
               setIsAdminView(false);
               if (window.location.hash === '##admin') {
@@ -974,17 +1058,32 @@ export default function App() {
         user={user}
       />
 
-      {/* Free Recurring Daily ($0.50) & Weekly ($1.00) Bonus Modal */}
+      {/* Free Recurring Weekly ($0.50) & Monthly ($1.00) Bonus Modal */}
       <DailyRewardsModal
         isOpen={isRewardsOpen}
         onClose={() => setIsRewardsOpen(false)}
         user={user}
-        onClaimDaily={handleClaimDaily}
         onClaimWeekly={handleClaimWeekly}
+        onClaimMonthly={handleClaimMonthly}
       />
 
-      {/* 24/7 Live Agent Web Message Help Desk */}
-      <HelpDeskModal />
+      {/* Quick Notifications & Notice Modal */}
+      <NotificationModal
+        isOpen={isNotificationOpen}
+        onClose={() => setIsNotificationOpen(false)}
+        notifications={notifications}
+        quickNotice={adminSettings.quickNotice}
+        onOpenDeposit={() => setIsDepositOpen(true)}
+        onOpenReferral={() => setIsReferralOpen(true)}
+      />
+
+      {/* 24/7 Live Agent Web Message Help Desk with in-chat Deposit & Agent Maya Verification */}
+      <HelpDeskModal
+        user={user}
+        adminSettings={adminSettings}
+        onSubmitDeposit={handleSubmitDeposit}
+        onApproveDeposit={handleApproveDeposit}
+      />
 
       {/* Footer (No hidden admin button on website) */}
       <footer className="mt-auto border-t border-slate-800/80 bg-slate-950 py-6 text-center text-xs text-slate-500">

@@ -50,7 +50,37 @@ export interface UserProfile {
   totalWagered?: number;
   lastDailyClaim?: number;
   lastWeeklyClaim?: number;
+  lastMonthlyClaim?: number;
+  firstDepositDone?: boolean;
   createdAt?: number;
+}
+
+export interface AppNotification {
+  id: string;
+  userId?: string; // empty string or 'all' means global broadcast
+  title: string;
+  message: string;
+  type: 'ADMIN_NOTICE' | 'REFERRAL_BONUS' | 'SIGNUP_BONUS' | 'DEPOSIT_APPROVED' | 'WITHDRAWAL_STATUS' | 'SYSTEM';
+  badge?: string;
+  isRead?: boolean;
+  createdAt: number;
+}
+
+export interface QuickNotice {
+  enabled: boolean;
+  title: string;
+  message: string;
+  badge?: string; // 'NOTICE' | 'BONUS' | 'URGENT' | 'DEPOSIT' | 'UPDATE'
+  updatedAt?: number;
+}
+
+export interface SupportPaymentMethod {
+  id: string;
+  name: string; // e.g. 'Binance Pay ID', 'USDT (TRC-20)', 'USDT (BEP-20)'
+  accountNumber: string;
+  accountType?: string; // 'Personal' | 'Merchant' | 'Agent' | 'Binance Pay' | 'Crypto'
+  instructions: string;
+  isActive: boolean;
 }
 
 export interface DepositRequest {
@@ -58,14 +88,17 @@ export interface DepositRequest {
   userId: string;
   userName: string;
   amountUSD: number;
+  depositType?: 'AI_BINANCE' | 'SUPPORT_AGENT';
+  supportMethodName?: string;
   binanceTxId: string;
   senderBinanceId: string;
-  network: 'BINANCE_PAY' | 'USDT_BEP20' | 'USDT_TRC20';
+  network?: string;
   screenshotUrl?: string;
   status: 'PENDING' | 'APPROVED' | 'REJECTED';
   adminNote?: string;
   aiVerified?: boolean;
   aiReason?: string;
+  userNote?: string;
   createdAt: number;
   updatedAt?: number;
 }
@@ -91,13 +124,17 @@ export interface AdminSettings {
   usdtTrc20Address: string;
   minBetUSD: number; // 0.20
   minWithdrawalUSD: number; // 10.00
-  minDepositUSD: number; // 1.00
+  minDepositUSD: number; // 5.00
   platformFeePercent: number; // 15%
   winnerProfitPercent: number; // 85%
   roundDurationSeconds: number; // exactly 30s as requested
   flippingDurationSeconds: number; // 3.5s realistic toss
   resultDisplaySeconds: number; // 4.5s
   forcedOutcome: 'AUTO' | 'FORCE_SHAPLA' | 'FORCE_PORIBAR';
+  quickNotice: QuickNotice;
+  supportPaymentMethods: SupportPaymentMethod[];
+  supportContactWhatsapp?: string;
+  supportContactTelegram?: string;
 }
 
 export interface RankedPlayer {

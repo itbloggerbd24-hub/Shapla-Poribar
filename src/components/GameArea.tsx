@@ -71,6 +71,16 @@ export const GameArea: React.FC<GameAreaProps> = ({
   const executeBet = (option: OptionType) => {
     const amount = currentBetAmount;
     
+    // Strict rule: cannot bet on both sides in the same round
+    if (option === 'SHAPLA' && userPoribarBet > 0) {
+      setBetError('Cannot bet on both options in the same round! You have already bet on Poribar.');
+      return;
+    }
+    if (option === 'PORIBAR' && userShaplaBet > 0) {
+      setBetError('Cannot bet on both options in the same round! You have already bet on Shapla.');
+      return;
+    }
+
     // Minimum bet is $0.20
     if (!amount || amount < 0.20) {
       setBetError('Minimum bet is $0.20 USD.');
@@ -232,16 +242,18 @@ export const GameArea: React.FC<GameAreaProps> = ({
 
             {/* Shapla Side-by-Side Action Button */}
             <button
-              disabled={!isBettingActive}
+              disabled={!isBettingActive || userPoribarBet > 0}
               onClick={() => executeBet('SHAPLA')}
-              className={`w-full mt-1.5 py-2 sm:py-2.5 px-1 sm:px-3 rounded-xl font-black text-[11px] sm:text-sm flex items-center justify-center gap-1 shadow transition-all transform active:scale-95 cursor-pointer ${
-                !isBettingActive
-                  ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
-                  : 'bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-500 hover:to-teal-500 text-white shadow-emerald-950/40'
+              className={`w-full mt-1.5 py-2 sm:py-2.5 px-1 sm:px-3 rounded-xl font-black text-[11px] sm:text-sm flex items-center justify-center gap-1 shadow transition-all ${
+                !isBettingActive || userPoribarBet > 0
+                  ? 'bg-slate-800 text-slate-500 cursor-not-allowed opacity-60'
+                  : 'bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-500 hover:to-teal-500 text-white shadow-emerald-950/40 transform active:scale-95 cursor-pointer'
               }`}
             >
               <Zap className="w-3.5 h-3.5 text-emerald-200" />
-              <span className="truncate">Bet ${currentBetAmount.toFixed(2)} Shapla</span>
+              <span className="truncate">
+                {userPoribarBet > 0 ? 'Locked' : `Bet $${currentBetAmount.toFixed(2)} Shapla`}
+              </span>
             </button>
           </div>
 
@@ -273,16 +285,18 @@ export const GameArea: React.FC<GameAreaProps> = ({
 
             {/* Poribar Side-by-Side Action Button */}
             <button
-              disabled={!isBettingActive}
+              disabled={!isBettingActive || userShaplaBet > 0}
               onClick={() => executeBet('PORIBAR')}
-              className={`w-full mt-1.5 py-2 sm:py-2.5 px-1 sm:px-3 rounded-xl font-black text-[11px] sm:text-sm flex items-center justify-center gap-1 shadow transition-all transform active:scale-95 cursor-pointer ${
-                !isBettingActive
-                  ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
-                  : 'bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-600 hover:from-amber-400 hover:to-yellow-400 text-slate-950 shadow-amber-950/40'
+              className={`w-full mt-1.5 py-2 sm:py-2.5 px-1 sm:px-3 rounded-xl font-black text-[11px] sm:text-sm flex items-center justify-center gap-1 shadow transition-all ${
+                !isBettingActive || userShaplaBet > 0
+                  ? 'bg-slate-800 text-slate-500 cursor-not-allowed opacity-60'
+                  : 'bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-600 hover:from-amber-400 hover:to-yellow-400 text-slate-950 shadow-amber-950/40 transform active:scale-95 cursor-pointer'
               }`}
             >
               <Zap className="w-3.5 h-3.5 text-slate-950" />
-              <span className="truncate">Bet ${currentBetAmount.toFixed(2)} Poribar</span>
+              <span className="truncate">
+                {userShaplaBet > 0 ? 'Locked' : `Bet $${currentBetAmount.toFixed(2)} Poribar`}
+              </span>
             </button>
           </div>
 

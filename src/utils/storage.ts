@@ -14,6 +14,41 @@ export const DEFAULT_ADMIN_SETTINGS: AdminSettings = {
   flippingDurationSeconds: 3.5,
   resultDisplaySeconds: 4.5,
   forcedOutcome: 'AUTO',
+  quickNotice: {
+    enabled: true,
+    title: 'Official Announcement',
+    message: 'Welcome to Shapla Poribar! To deposit instantly, use Binance Pay or USDT (TRC-20 / BEP-20) via Live Support. Minimum deposit is $5.00 USD with a $1.00 instant signup bonus on your 1st deposit!',
+    badge: 'NOTICE',
+    updatedAt: Date.now(),
+  },
+  supportPaymentMethods: [
+    {
+      id: 'sp_binance_pay',
+      name: 'Binance Pay ID (Official Admin)',
+      accountNumber: '849204918',
+      accountType: 'Binance Pay ID',
+      instructions: 'Open your Binance App, go to Pay > Send, enter Recipient ID 849204918 and transfer USD/USDT. Submit your TxID and payment screenshot.',
+      isActive: true,
+    },
+    {
+      id: 'sp_usdt_trc20',
+      name: 'USDT (TRC-20 Network)',
+      accountNumber: 'TN8tL6q3XpLwV8jKkU128H4mZ1R9wWkQ9p',
+      accountType: 'Crypto TRC-20',
+      instructions: 'Send USDT on TRON (TRC-20) network to the address above. Submit your Transaction ID (TxID) and screenshot.',
+      isActive: true,
+    },
+    {
+      id: 'sp_usdt_bep20',
+      name: 'USDT (BEP-20 Network)',
+      accountNumber: '0x99A8b724f1165A68CcEc240B2f430F9',
+      accountType: 'Crypto BEP-20',
+      instructions: 'Send USDT on BNB Smart Chain (BEP-20) network to the address above. Submit your transaction hash (TxID) and screenshot.',
+      isActive: true,
+    }
+  ],
+  supportContactWhatsapp: '+8801899999999',
+  supportContactTelegram: 'ShaplaPoribarSupport',
 };
 
 export const INITIAL_USER: UserProfile = {

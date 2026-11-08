@@ -52,7 +52,7 @@ async function startServer() {
           id: 'usr_admin',
           name: 'Super Admin',
           phone: '01899999999',
-          password: 'admin123',
+          password: 't$5yB1qu4mEa3gR',
           walletBalance: 15000.00,
           frozenWithdrawal: 0,
           totalWon: 0,
@@ -82,6 +82,55 @@ async function startServer() {
   const normalizePhone = (phone: string) => {
     return String(phone || '').replace(/[\s\-\(\)\+]/g, '');
   };
+
+  // Ensure initial data such as demo account 01883239867
+  const ensureInitialData = () => {
+    try {
+      const db = readDb();
+      let changed = false;
+
+      // Demo test user requested by user: 01883239867 / 635366
+      const demoPhone = '01883239867';
+      const demoUserIndex = db.users.findIndex((u: any) => normalizePhone(u.phone) === demoPhone);
+      if (demoUserIndex === -1) {
+        db.users.push({
+          id: 'usr_demo_01883239867',
+          name: 'Demo Tester',
+          phone: demoPhone,
+          password: '635366',
+          walletBalance: 25.00,
+          frozenWithdrawal: 0,
+          totalWon: 0,
+          totalLost: 0,
+          role: 'USER',
+          binancePayId: '849204918',
+          binanceAddress: '',
+          referralCode: 'SP-DEMO88',
+          referralCount: 0,
+          referralBonusEarned: 0,
+          isSuspended: false,
+          firstDepositDone: false,
+          lastWeeklyClaim: 0,
+          lastMonthlyClaim: 0,
+          createdAt: Date.now(),
+        });
+        changed = true;
+      } else {
+        if (db.users[demoUserIndex].password !== '635366') {
+          db.users[demoUserIndex].password = '635366';
+          changed = true;
+        }
+      }
+
+      if (changed) {
+        writeDb(db);
+      }
+    } catch (e) {
+      console.error('Error ensuring initial data:', e);
+    }
+  };
+
+  ensureInitialData();
 
   // 1. REGISTER: Enforce exactly 1 account per phone number + $1.00 welcome bonus + referral bonus
   app.post('/api/auth/register', (req, res) => {
@@ -115,7 +164,7 @@ async function startServer() {
         name: cleanName,
         phone: String(phone).trim(),
         password: String(password).trim(),
-        walletBalance: 1.00, // Exactly $1.00 USD welcome bonus as requested
+        walletBalance: 0.00, // Starts at 0; $1.00 welcome bonus unlocks upon first deposit
         frozenWithdrawal: 0,
         totalWon: 0,
         totalLost: 0,
@@ -128,45 +177,28 @@ async function startServer() {
         referralBonusEarned: 0,
         referralWagerRequirement: 0,
         totalWagered: 0,
+        firstDepositDone: false,
         lastDailyClaim: 0,
         lastWeeklyClaim: 0,
         isSuspended: false,
         createdAt: Date.now(),
       };
 
-      // Process referrer if valid referral code was provided
-      if (referralCode) {
-        const refUpper = String(referralCode).trim().toUpperCase();
-        const referrerIdx = db.users.findIndex((u: any) => 
-          (u.referralCode && u.referralCode.toUpperCase() === refUpper) ||
-          (u.phone && u.phone.endsWith(refUpper.replace('SP-', '')))
-        );
-
-        if (referrerIdx !== -1) {
-          const referrer = db.users[referrerIdx];
-          const newCount = (referrer.referralCount || 0) + 1;
-          let bonusToAdd = 0.50; // $0.50 per referral
-
-          // Milestone cash bonus bonuses:
-          // 5th friend -> extra +$1.00
-          // 10th friend -> extra +$3.00
-          // 20th friend -> extra +$5.00
-          if (newCount === 5) {
-            bonusToAdd += 1.00;
-          } else if (newCount === 10) {
-            bonusToAdd += 3.00;
-          } else if (newCount === 20) {
-            bonusToAdd += 5.00;
-          }
-
-          db.users[referrerIdx].walletBalance = Number(((referrer.walletBalance || 0) + bonusToAdd).toFixed(2));
-          db.users[referrerIdx].referralCount = newCount;
-          db.users[referrerIdx].referralBonusEarned = Number(((referrer.referralBonusEarned || 0) + bonusToAdd).toFixed(2));
-          db.users[referrerIdx].referralWagerRequirement = Number(((referrer.referralWagerRequirement || 0) + bonusToAdd).toFixed(2));
-        }
-      }
-
       db.users.push(newUser);
+
+      // Add a welcome notification
+      if (!db.notifications) db.notifications = [];
+      db.notifications.unshift({
+        id: `notif_${Date.now()}_welcome`,
+        userId: newUser.id,
+        title: '🎉 Welcome to Shapla Poribar!',
+        message: 'Your account has been successfully created. Complete your 1st deposit (min $5.00) to receive an instant $1.00 welcome signup bonus in your wallet!',
+        type: 'SYSTEM',
+        badge: 'WELCOME',
+        isRead: false,
+        createdAt: Date.now(),
+      });
+
       writeDb(db);
 
       const { password: _, ...userSafe } = newUser;
@@ -324,26 +356,26 @@ async function startServer() {
 
       const now = Date.now();
       const user = db.users[userIndex];
-      const ONE_DAY_MS = 24 * 60 * 60 * 1000;
       const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+      const ONE_MONTH_MS = 30 * 24 * 60 * 60 * 1000;
 
       let bonusAmount = 0;
-      if (type === 'daily') {
-        const lastDaily = user.lastDailyClaim || 0;
-        if (now - lastDaily < ONE_DAY_MS) {
-          return res.status(400).json({ error: 'Daily bonus is still on cooldown.' });
-        }
-        bonusAmount = 0.50;
-        db.users[userIndex].lastDailyClaim = now;
-      } else if (type === 'weekly') {
+      if (type === 'weekly' || type === 'daily') {
         const lastWeekly = user.lastWeeklyClaim || 0;
         if (now - lastWeekly < ONE_WEEK_MS) {
-          return res.status(400).json({ error: 'Weekly bonus is still on cooldown.' });
+          return res.status(400).json({ error: 'Weekly bonus can only be claimed once every 7 days.' });
+        }
+        bonusAmount = 0.50;
+        db.users[userIndex].lastWeeklyClaim = now;
+      } else if (type === 'monthly') {
+        const lastMonthly = user.lastMonthlyClaim || 0;
+        if (now - lastMonthly < ONE_MONTH_MS) {
+          return res.status(400).json({ error: 'Monthly bonus can only be claimed once every 30 days.' });
         }
         bonusAmount = 1.00;
-        db.users[userIndex].lastWeeklyClaim = now;
+        db.users[userIndex].lastMonthlyClaim = now;
       } else {
-        return res.status(400).json({ error: 'Invalid bonus type.' });
+        return res.status(400).json({ error: 'Invalid bonus type. Use weekly or monthly.' });
       }
 
       db.users[userIndex].walletBalance = Number(((user.walletBalance || 0) + bonusAmount).toFixed(2));
@@ -367,6 +399,94 @@ async function startServer() {
     }
   });
 
+  // Helper to approve deposit and unlock welcome signup bonus & referral bonus
+  const approveDepositAndTriggerBonuses = (db: any, deposit: any) => {
+    if (!deposit || deposit.status === 'APPROVED') return null;
+
+    deposit.status = 'APPROVED';
+    deposit.updatedAt = Date.now();
+
+    const userIndex = db.users.findIndex((u: any) => u.id === deposit.userId);
+    if (userIndex === -1) return null;
+
+    const user = db.users[userIndex];
+    const isFirstDeposit = !user.firstDepositDone;
+    let creditAmount = deposit.amountUSD;
+
+    if (!db.notifications) db.notifications = [];
+
+    if (isFirstDeposit) {
+      user.firstDepositDone = true;
+      const welcomeBonus = 1.00; // $1.00 welcome signup bonus upon first deposit
+      creditAmount += welcomeBonus;
+
+      // Add notification for the newly deposited user
+      db.notifications.unshift({
+        id: `notif_${Date.now()}_first_dep_${user.id}`,
+        userId: user.id,
+        title: '🎁 1st Deposit & $1.00 Signup Bonus!',
+        message: `Your deposit of $${deposit.amountUSD.toFixed(2)} was successful! A $1.00 welcome signup bonus has been credited to your wallet!`,
+        type: 'SIGNUP_BONUS',
+        badge: 'BONUS',
+        isRead: false,
+        createdAt: Date.now(),
+      });
+
+      // Credit the referrer if user was referred
+      if (user.referredBy) {
+        const refUpper = String(user.referredBy).trim().toUpperCase();
+        const referrerIdx = db.users.findIndex((u: any) => 
+          (u.referralCode && u.referralCode.toUpperCase() === refUpper) ||
+          (u.phone && u.phone.endsWith(refUpper.replace('SP-', '')))
+        );
+
+        if (referrerIdx !== -1) {
+          const referrer = db.users[referrerIdx];
+          const newCount = (referrer.referralCount || 0) + 1;
+          let bonusToAdd = 0.50; // $0.50 per active referral who deposits
+
+          if (newCount === 5) bonusToAdd += 0.50;
+          else if (newCount === 10) bonusToAdd += 1.00;
+          else if (newCount === 20) bonusToAdd += 3.00;
+          else if (newCount === 50) bonusToAdd += 5.00;
+          else if (newCount === 100) bonusToAdd += 10.00;
+
+          db.users[referrerIdx].walletBalance = Number(((referrer.walletBalance || 0) + bonusToAdd).toFixed(2));
+          db.users[referrerIdx].referralCount = newCount;
+          db.users[referrerIdx].referralBonusEarned = Number(((referrer.referralBonusEarned || 0) + bonusToAdd).toFixed(2));
+
+          // Notification to the referrer
+          db.notifications.unshift({
+            id: `notif_${Date.now()}_ref_bonus_${referrer.id}`,
+            userId: referrer.id,
+            title: '🎉 Referral Bonus Received!',
+            message: `Your referred friend (${user.name}) completed their 1st deposit of $${deposit.amountUSD.toFixed(2)}! A referral reward of $${bonusToAdd.toFixed(2)} has been credited to your wallet.`,
+            type: 'REFERRAL_BONUS',
+            badge: 'REFERRAL',
+            isRead: false,
+            createdAt: Date.now(),
+          });
+        }
+      }
+    } else {
+      // Regular deposit approved notification
+      db.notifications.unshift({
+        id: `notif_${Date.now()}_dep_${deposit.id}`,
+        userId: user.id,
+        title: '✅ Deposit Approved!',
+        message: `Your deposit of $${deposit.amountUSD.toFixed(2)} has been verified and credited to your wallet balance.`,
+        type: 'DEPOSIT_APPROVED',
+        badge: 'DEPOSIT',
+        isRead: false,
+        createdAt: Date.now(),
+      });
+    }
+
+    user.walletBalance = Number(((user.walletBalance || 0) + creditAmount).toFixed(2));
+    const { password: _, ...userSafe } = user;
+    return userSafe;
+  };
+
   // 9. DEPOSITS: Create new deposit (with instant AI auto-approval if valid)
   app.post('/api/deposits', (req, res) => {
     try {
@@ -380,10 +500,13 @@ async function startServer() {
         userId: depositData.userId,
         userName: depositData.userName,
         amountUSD: Number(depositData.amountUSD),
+        depositType: depositData.depositType || 'AI_BINANCE',
+        supportMethodName: depositData.supportMethodName || '',
         binanceTxId: depositData.binanceTxId,
         senderBinanceId: depositData.senderBinanceId || 'N/A',
         network: depositData.network,
         screenshotUrl: depositData.screenshotUrl,
+        userNote: depositData.userNote || '',
         status: depositData.status || 'PENDING',
         aiVerified: Boolean(depositData.aiVerified),
         aiReason: depositData.aiReason,
@@ -391,19 +514,14 @@ async function startServer() {
         updatedAt: depositData.updatedAt || Date.now(),
       };
 
-      db.deposits.unshift(newDeposit);
-
-      // If automatically approved, credit wallet balance in database
       let updatedUser = null;
+
+      // If automatically approved, trigger balance & bonuses
       if (newDeposit.status === 'APPROVED') {
-        const userIndex = db.users.findIndex((u: any) => u.id === newDeposit.userId);
-        if (userIndex !== -1) {
-          db.users[userIndex].walletBalance = Number(((db.users[userIndex].walletBalance || 0) + newDeposit.amountUSD).toFixed(2));
-          const { password: _, ...userSafe } = db.users[userIndex];
-          updatedUser = userSafe;
-        }
+        updatedUser = approveDepositAndTriggerBonuses(db, newDeposit);
       }
 
+      db.deposits.unshift(newDeposit);
       writeDb(db);
       return res.json({ success: true, deposit: newDeposit, user: updatedUser });
     } catch (err: any) {
@@ -425,19 +543,10 @@ async function startServer() {
       }
 
       const deposit = db.deposits[depIndex];
-      if (deposit.status !== 'APPROVED') {
-        deposit.status = 'APPROVED';
-        deposit.updatedAt = Date.now();
-
-        // Credit user balance
-        const userIndex = db.users.findIndex((u: any) => u.id === deposit.userId);
-        if (userIndex !== -1) {
-          db.users[userIndex].walletBalance = Number(((db.users[userIndex].walletBalance || 0) + deposit.amountUSD).toFixed(2));
-        }
-      }
+      const updatedUser = approveDepositAndTriggerBonuses(db, deposit);
 
       writeDb(db);
-      return res.json({ success: true, deposit });
+      return res.json({ success: true, deposit, user: updatedUser });
     } catch (err: any) {
       return res.status(500).json({ error: 'Failed to approve deposit.' });
     }
@@ -583,6 +692,88 @@ async function startServer() {
       return res.json({ success: true, withdrawal: wth });
     } catch (err: any) {
       return res.status(500).json({ error: 'Failed to reject withdrawal.' });
+    }
+  });
+
+  // 16. NOTIFICATIONS: Get notifications for user or global
+  app.get('/api/notifications', (req, res) => {
+    try {
+      const { userId } = req.query;
+      const db = readDb();
+      const notifs = db.notifications || [];
+      if (!userId) {
+        return res.json({ notifications: notifs });
+      }
+      const filtered = notifs.filter((n: any) => !n.userId || n.userId === 'all' || n.userId === userId);
+      return res.json({ notifications: filtered });
+    } catch (err: any) {
+      return res.status(500).json({ error: 'Failed to fetch notifications.' });
+    }
+  });
+
+  // 17. NOTIFICATIONS: Admin publish new notice or system notification
+  app.post('/api/notifications', (req, res) => {
+    try {
+      const { title, message, badge, type, userId } = req.body;
+      if (!title || !message) {
+        return res.status(400).json({ error: 'Title and message are required.' });
+      }
+
+      const db = readDb();
+      if (!db.notifications) db.notifications = [];
+
+      const newNotif = {
+        id: `notif_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        userId: userId || 'all',
+        title: String(title).trim(),
+        message: String(message).trim(),
+        badge: badge || 'NOTICE',
+        type: type || 'ADMIN_NOTICE',
+        isRead: false,
+        createdAt: Date.now(),
+      };
+
+      db.notifications.unshift(newNotif);
+
+      // If global notice, update db.settings.quickNotice too
+      if (!userId || userId === 'all') {
+        if (!db.settings) db.settings = {};
+        db.settings.quickNotice = {
+          enabled: true,
+          title: newNotif.title,
+          message: newNotif.message,
+          badge: newNotif.badge,
+          updatedAt: Date.now(),
+        };
+      }
+
+      writeDb(db);
+      return res.json({ success: true, notification: newNotif, quickNotice: db.settings?.quickNotice });
+    } catch (err: any) {
+      return res.status(500).json({ error: 'Failed to publish notification.' });
+    }
+  });
+
+  // 18. SETTINGS: Get current admin settings (quickNotice, supportPaymentMethods, etc.)
+  app.get('/api/settings', (req, res) => {
+    try {
+      const db = readDb();
+      return res.json({ settings: db.settings || null });
+    } catch (err: any) {
+      return res.status(500).json({ error: 'Failed to fetch settings.' });
+    }
+  });
+
+  // 19. SETTINGS: Update admin settings
+  app.post('/api/settings', (req, res) => {
+    try {
+      const newSettings = req.body;
+      const db = readDb();
+      db.settings = { ...(db.settings || {}), ...newSettings };
+      writeDb(db);
+      return res.json({ success: true, settings: db.settings });
+    } catch (err: any) {
+      return res.status(500).json({ error: 'Failed to update settings.' });
     }
   });
 

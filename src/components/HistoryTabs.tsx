@@ -82,7 +82,6 @@ export const HistoryTabs: React.FC<HistoryTabsProps> = ({
                     <th className="py-2.5 px-3">Choice</th>
                     <th className="py-2.5 px-3">Bet Amount</th>
                     <th className="py-2.5 px-3">Status</th>
-                    <th className="py-2.5 px-3 text-right">Result & Payout</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/60 font-medium">
@@ -92,16 +91,13 @@ export const HistoryTabs: React.FC<HistoryTabsProps> = ({
                         {new Date(b.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                       </td>
                       <td className="py-2.5 px-3">
-                        <div className="flex items-center gap-2">
-                          <CoinEmblem side={b.option} size="sm" />
-                          <span
-                            className={`font-black uppercase tracking-wider text-xs ${
-                              b.option === 'SHAPLA' ? 'text-emerald-400' : 'text-amber-400'
-                            }`}
-                          >
-                            {b.option}
-                          </span>
-                        </div>
+                        <span
+                          className={`font-black uppercase tracking-wider text-xs ${
+                            b.option === 'SHAPLA' ? 'text-emerald-400' : 'text-amber-400'
+                          }`}
+                        >
+                          {b.option === 'SHAPLA' ? 'Shapla' : 'Poribar'}
+                        </span>
                       </td>
                       <td className="py-2.5 px-3 font-mono font-bold text-white">
                         ${b.amount.toFixed(2)}
@@ -121,19 +117,6 @@ export const HistoryTabs: React.FC<HistoryTabsProps> = ({
                           <span className="px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-400 font-bold text-[10px] inline-flex items-center gap-1">
                             <Clock className="w-3 h-3" /> Active...
                           </span>
-                        )}
-                      </td>
-                      <td className="py-2.5 px-3 text-right font-mono font-black">
-                        {b.status === 'WON' && (
-                          <span className="text-emerald-400">
-                            +${b.payout?.toFixed(2)}
-                          </span>
-                        )}
-                        {b.status === 'LOST' && (
-                          <span className="text-rose-400">-${b.amount.toFixed(2)}</span>
-                        )}
-                        {b.status === 'PENDING' && (
-                          <span className="text-slate-400">Pending</span>
                         )}
                       </td>
                     </tr>

@@ -1,6 +1,27 @@
 {
   "users": [
     {
+      "id": "usr_demo_01883239867",
+      "name": "Demo Tester",
+      "phone": "01883239867",
+      "password": "635366",
+      "walletBalance": 25,
+      "frozenWithdrawal": 0,
+      "totalWon": 0,
+      "totalLost": 0,
+      "role": "USER",
+      "binancePayId": "849204918",
+      "binanceAddress": "",
+      "referralCode": "SP-DEMO88",
+      "referralCount": 0,
+      "referralBonusEarned": 0,
+      "isSuspended": false,
+      "firstDepositDone": false,
+      "lastWeeklyClaim": 0,
+      "lastMonthlyClaim": 0,
+      "createdAt": 1794050000000
+    },
+    {
       "id": "usr_player_1",
       "name": "Alex Hunter",
       "phone": "01712345678",
@@ -76,5 +97,26 @@
     }
   ],
   "deposits": [],
-  "withdrawals": []
+  "withdrawals": [],
+  "notifications": [
+    {
+      "id": "notif_1794048610916_s40j",
+      "userId": "all",
+      "title": "জরুরি নোটিশ",
+      "message": "আমাদের নতুন সাপোর্ট এজেন্ট ডিপোজিট ও রেফারেল সিস্টেম চালু হয়েছে!",
+      "badge": "HOT",
+      "type": "ADMIN_NOTICE",
+      "isRead": false,
+      "createdAt": 1794048610916
+    }
+  ],
+  "settings": {
+    "quickNotice": {
+      "enabled": true,
+      "title": "জরুরি নোটিশ",
+      "message": "আমাদের নতুন সাপোর্ট এজেন্ট ডিপোজিট ও রেফারেল সিস্টেম চালু হয়েছে!",
+      "badge": "HOT",
+      "updatedAt": 1794048610916
+    }
+  }
 }
