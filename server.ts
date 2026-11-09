@@ -44,7 +44,7 @@ async function startServer() {
           totalLost: 0,
           role: 'USER',
           binancePayId: '749102381',
-          binanceAddress: '0x99A8b724f1165A68CcEc240B2f430F9',
+          binanceAddress: '0xd1194126385ab996d60542f54e5d8f1372a4cc3e',
           isSuspended: false,
           createdAt: Date.now() - 86400000 * 5,
         },
@@ -58,8 +58,8 @@ async function startServer() {
           totalWon: 0,
           totalLost: 0,
           role: 'ADMIN',
-          binancePayId: '849204918',
-          binanceAddress: '0x3Fa9A80B57F32b9A42Ef78A8696F89c8D11d9C54',
+          binancePayId: '1156528658',
+          binanceAddress: '0xd1194126385ab996d60542f54e5d8f1372a4cc3e',
           isSuspended: false,
           createdAt: Date.now() - 86400000 * 30,
         }
@@ -103,7 +103,7 @@ async function startServer() {
           totalWon: 0,
           totalLost: 0,
           role: 'USER',
-          binancePayId: '849204918',
+          binancePayId: '1156528658',
           binanceAddress: '',
           referralCode: 'SP-DEMO88',
           referralCount: 0,
@@ -359,6 +359,18 @@ async function startServer() {
       const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
       const ONE_MONTH_MS = 30 * 24 * 60 * 60 * 1000;
 
+      // All bonuses work only after first deposit has been approved
+      const userHasDeposited = Boolean(
+        user.firstDepositDone ||
+        (db.deposits && db.deposits.some((d: any) => d.userId === user.id && d.status === 'APPROVED'))
+      );
+
+      if (!userHasDeposited) {
+        return res.status(400).json({ 
+          error: 'All bonuses unlock only after your 1st approved deposit (min $5.00 USD).' 
+        });
+      }
+
       let bonusAmount = 0;
       if (type === 'weekly' || type === 'daily') {
         const lastWeekly = user.lastWeeklyClaim || 0;
@@ -420,6 +432,22 @@ async function startServer() {
       const welcomeBonus = 1.00; // $1.00 welcome signup bonus upon first deposit
       creditAmount += welcomeBonus;
 
+      // Unlock any pending referral bonuses accumulated before 1st deposit
+      if (user.pendingReferralBonus && user.pendingReferralBonus > 0) {
+        creditAmount += user.pendingReferralBonus;
+        db.notifications.unshift({
+          id: `notif_${Date.now()}_pending_ref_${user.id}`,
+          userId: user.id,
+          title: '🎉 Referral Earnings Unlocked!',
+          message: `Your $${user.pendingReferralBonus.toFixed(2)} accumulated referral bonuses have been unlocked and added to your wallet upon your 1st deposit!`,
+          type: 'REFERRAL_BONUS',
+          badge: 'BONUS',
+          isRead: false,
+          createdAt: Date.now(),
+        });
+        user.pendingReferralBonus = 0;
+      }
+
       // Add notification for the newly deposited user
       db.notifications.unshift({
         id: `notif_${Date.now()}_first_dep_${user.id}`,
@@ -451,21 +479,45 @@ async function startServer() {
           else if (newCount === 50) bonusToAdd += 5.00;
           else if (newCount === 100) bonusToAdd += 10.00;
 
-          db.users[referrerIdx].walletBalance = Number(((referrer.walletBalance || 0) + bonusToAdd).toFixed(2));
-          db.users[referrerIdx].referralCount = newCount;
-          db.users[referrerIdx].referralBonusEarned = Number(((referrer.referralBonusEarned || 0) + bonusToAdd).toFixed(2));
+          // Check if referrer has completed 1st deposit
+          const referrerHasDeposited = Boolean(
+            referrer.firstDepositDone ||
+            (db.deposits && db.deposits.some((d: any) => d.userId === referrer.id && d.status === 'APPROVED'))
+          );
 
-          // Notification to the referrer
-          db.notifications.unshift({
-            id: `notif_${Date.now()}_ref_bonus_${referrer.id}`,
-            userId: referrer.id,
-            title: '🎉 Referral Bonus Received!',
-            message: `Your referred friend (${user.name}) completed their 1st deposit of $${deposit.amountUSD.toFixed(2)}! A referral reward of $${bonusToAdd.toFixed(2)} has been credited to your wallet.`,
-            type: 'REFERRAL_BONUS',
-            badge: 'REFERRAL',
-            isRead: false,
-            createdAt: Date.now(),
-          });
+          if (referrerHasDeposited) {
+            db.users[referrerIdx].walletBalance = Number(((referrer.walletBalance || 0) + bonusToAdd).toFixed(2));
+            db.users[referrerIdx].referralCount = newCount;
+            db.users[referrerIdx].referralBonusEarned = Number(((referrer.referralBonusEarned || 0) + bonusToAdd).toFixed(2));
+
+            // Notification to the referrer
+            db.notifications.unshift({
+              id: `notif_${Date.now()}_ref_bonus_${referrer.id}`,
+              userId: referrer.id,
+              title: '🎉 Referral Bonus Received!',
+              message: `Your referred friend (${user.name}) completed their 1st deposit of $${deposit.amountUSD.toFixed(2)}! A referral reward of $${bonusToAdd.toFixed(2)} has been credited to your wallet.`,
+              type: 'REFERRAL_BONUS',
+              badge: 'REFERRAL',
+              isRead: false,
+              createdAt: Date.now(),
+            });
+          } else {
+            // Referrer has not deposited yet: hold in pending until they make 1st deposit
+            db.users[referrerIdx].pendingReferralBonus = Number(((referrer.pendingReferralBonus || 0) + bonusToAdd).toFixed(2));
+            db.users[referrerIdx].referralCount = newCount;
+            db.users[referrerIdx].referralBonusEarned = Number(((referrer.referralBonusEarned || 0) + bonusToAdd).toFixed(2));
+
+            db.notifications.unshift({
+              id: `notif_${Date.now()}_ref_pending_${referrer.id}`,
+              userId: referrer.id,
+              title: '🎁 Referral Bonus Waiting!',
+              message: `Your referred friend (${user.name}) completed their 1st deposit! Make your 1st deposit (min $5.00 USD) to unlock and receive your $${bonusToAdd.toFixed(2)} referral bonus!`,
+              type: 'REFERRAL_BONUS',
+              badge: 'REFERRAL',
+              isRead: false,
+              createdAt: Date.now(),
+            });
+          }
         }
       }
     } else {

@@ -4,11 +4,12 @@ import {
   X, 
   Gift, 
   Sparkles, 
-  CheckCircle2, 
   Clock, 
-  Coins, 
   Calendar,
-  Flame
+  Flame,
+  Lock,
+  ArrowRight,
+  ShieldAlert
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { soundManager } from '../utils/audio';
@@ -20,6 +21,8 @@ interface DailyRewardsModalProps {
   onClaimWeekly: () => void;
   onClaimMonthly: () => void;
   onClaimDaily?: () => void;
+  hasDeposited?: boolean;
+  onOpenDeposit?: () => void;
 }
 
 const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
@@ -31,6 +34,8 @@ export const DailyRewardsModal: React.FC<DailyRewardsModalProps> = ({
   user,
   onClaimWeekly,
   onClaimMonthly,
+  hasDeposited,
+  onOpenDeposit,
 }) => {
   const [now, setNow] = useState(Date.now());
 
@@ -42,11 +47,14 @@ export const DailyRewardsModal: React.FC<DailyRewardsModalProps> = ({
 
   if (!isOpen) return null;
 
+  // All bonuses work only after 1st deposit is approved
+  const isDepositUnlocked = Boolean(hasDeposited ?? user.firstDepositDone);
+
   const lastWeekly = user.lastWeeklyClaim || 0;
   const lastMonthly = user.lastMonthlyClaim || 0;
 
-  const weeklyEligible = (now - lastWeekly) >= ONE_WEEK_MS;
-  const monthlyEligible = (now - lastMonthly) >= ONE_MONTH_MS;
+  const weeklyEligible = isDepositUnlocked && (now - lastWeekly) >= ONE_WEEK_MS;
+  const monthlyEligible = isDepositUnlocked && (now - lastMonthly) >= ONE_MONTH_MS;
 
   const weeklyRemainingMs = Math.max(0, ONE_WEEK_MS - (now - lastWeekly));
   const monthlyRemainingMs = Math.max(0, ONE_MONTH_MS - (now - lastMonthly));
@@ -64,6 +72,11 @@ export const DailyRewardsModal: React.FC<DailyRewardsModalProps> = ({
   };
 
   const handleClaimWeeklyClick = () => {
+    if (!isDepositUnlocked) {
+      onClose();
+      onOpenDeposit?.();
+      return;
+    }
     if (!weeklyEligible) return;
     confetti({
       particleCount: 90,
@@ -76,6 +89,11 @@ export const DailyRewardsModal: React.FC<DailyRewardsModalProps> = ({
   };
 
   const handleClaimMonthlyClick = () => {
+    if (!isDepositUnlocked) {
+      onClose();
+      onOpenDeposit?.();
+      return;
+    }
     if (!monthlyEligible) return;
     confetti({
       particleCount: 140,
@@ -115,11 +133,43 @@ export const DailyRewardsModal: React.FC<DailyRewardsModalProps> = ({
           </button>
         </div>
 
-        <div className="mt-5 space-y-4">
+        {/* 1st Deposit Locked Warning Banner */}
+        {!isDepositUnlocked && (
+          <div className="mt-4 p-3.5 rounded-2xl bg-gradient-to-r from-amber-500/15 via-rose-500/10 to-slate-950 border border-amber-500/40 flex items-start gap-3 shadow-md">
+            <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0 mt-0.5">
+              <Lock className="w-4 h-4" />
+            </div>
+            <div className="flex-1 text-xs">
+              <div className="font-bold text-amber-300 flex items-center gap-1.5">
+                <span>1st Deposit Required to Unlock Bonuses</span>
+              </div>
+              <p className="text-slate-300 text-[11px] mt-1 leading-relaxed">
+                All bonuses (Weekly $0.50 & Monthly $1.00 + $1.00 Signup Bonus) become active immediately after your 1st approved deposit (min $5.00 USD).
+              </p>
+              {onOpenDeposit && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onOpenDeposit();
+                  }}
+                  className="mt-2.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-400 hover:from-amber-400 hover:to-yellow-300 text-slate-950 font-black text-[11px] inline-flex items-center gap-1.5 shadow-md cursor-pointer transition transform active:scale-95"
+                >
+                  <span>Deposit Now to Unlock All Bonuses</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        <div className="mt-4 space-y-4">
           
           {/* Card 1: Weekly Free Bonus ($0.50 USD) */}
           <div className={`p-4 rounded-2xl border transition ${
-            weeklyEligible
+            !isDepositUnlocked
+              ? 'bg-slate-950/60 border-slate-800 opacity-90'
+              : weeklyEligible
               ? 'bg-gradient-to-br from-amber-500/15 via-slate-900 to-slate-950 border-amber-500/60 shadow-lg ring-1 ring-amber-500/30'
               : 'bg-slate-950/70 border-slate-800'
           }`}>
@@ -129,7 +179,14 @@ export const DailyRewardsModal: React.FC<DailyRewardsModalProps> = ({
                   <Flame className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-black text-white">Weekly Bonus</h3>
+                  <div className="flex items-center gap-1.5">
+                    <h3 className="text-sm font-black text-white">Weekly Bonus</h3>
+                    {!isDepositUnlocked && (
+                      <span className="px-1.5 py-0.5 rounded-md bg-rose-500/20 text-rose-300 text-[9px] font-bold flex items-center gap-0.5">
+                        <Lock className="w-2.5 h-2.5" /> Locked
+                      </span>
+                    )}
+                  </div>
                   <span className="text-[10px] text-slate-400">Can be claimed once every 7 days</span>
                 </div>
               </div>
@@ -142,7 +199,19 @@ export const DailyRewardsModal: React.FC<DailyRewardsModalProps> = ({
               Weekly free wagering credits credited directly to your playable balance.
             </p>
 
-            {weeklyEligible ? (
+            {!isDepositUnlocked ? (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onOpenDeposit?.();
+                }}
+                className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-750 border border-amber-500/30 text-amber-300 font-bold text-xs shadow transition cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                <Lock className="w-3.5 h-3.5 text-amber-400" />
+                <span>Make 1st Deposit to Unlock ($0.50)</span>
+              </button>
+            ) : weeklyEligible ? (
               <button
                 type="button"
                 onClick={handleClaimWeeklyClick}
@@ -165,7 +234,9 @@ export const DailyRewardsModal: React.FC<DailyRewardsModalProps> = ({
 
           {/* Card 2: Monthly Free Bonus ($1.00 USD) */}
           <div className={`p-4 rounded-2xl border transition ${
-            monthlyEligible
+            !isDepositUnlocked
+              ? 'bg-slate-950/60 border-slate-800 opacity-90'
+              : monthlyEligible
               ? 'bg-gradient-to-br from-emerald-500/15 via-slate-900 to-slate-950 border-emerald-500/60 shadow-lg ring-1 ring-emerald-500/30'
               : 'bg-slate-950/70 border-slate-800'
           }`}>
@@ -175,7 +246,14 @@ export const DailyRewardsModal: React.FC<DailyRewardsModalProps> = ({
                   <Calendar className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-black text-white">Monthly Loyalty Bonus</h3>
+                  <div className="flex items-center gap-1.5">
+                    <h3 className="text-sm font-black text-white">Monthly Loyalty Bonus</h3>
+                    {!isDepositUnlocked && (
+                      <span className="px-1.5 py-0.5 rounded-md bg-rose-500/20 text-rose-300 text-[9px] font-bold flex items-center gap-0.5">
+                        <Lock className="w-2.5 h-2.5" /> Locked
+                      </span>
+                    )}
+                  </div>
                   <span className="text-[10px] text-slate-400">Can be claimed once every 30 days</span>
                 </div>
               </div>
@@ -188,7 +266,19 @@ export const DailyRewardsModal: React.FC<DailyRewardsModalProps> = ({
               Monthly loyalty gift accessible to all active players.
             </p>
 
-            {monthlyEligible ? (
+            {!isDepositUnlocked ? (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onOpenDeposit?.();
+                }}
+                className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-750 border border-emerald-500/30 text-emerald-300 font-bold text-xs shadow transition cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                <Lock className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Make 1st Deposit to Unlock ($1.00)</span>
+              </button>
+            ) : monthlyEligible ? (
               <button
                 type="button"
                 onClick={handleClaimMonthlyClick}

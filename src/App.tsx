@@ -245,8 +245,20 @@ export default function App() {
     }
   };
 
+  // User has completed at least 1 approved deposit check
+  const userHasApprovedDeposit = Boolean(
+    user?.firstDepositDone ||
+    deposits.some((d) => d.userId === user?.id && d.status === 'APPROVED')
+  );
+
   // Claim Weekly Free Bonus ($0.50 USD every 7 days) - Persists on server and local
   const handleClaimWeekly = async () => {
+    if (!userHasApprovedDeposit) {
+      setIsRewardsOpen(false);
+      setIsDepositOpen(true);
+      return;
+    }
+
     if (user?.id) {
       const res = await authApi.claimBonus(user.id, 'weekly');
       if (res.success && res.user) {
@@ -270,6 +282,12 @@ export default function App() {
 
   // Claim Monthly Free Loyalty Bonus ($1.00 USD every 30 days) - Persists on server and local
   const handleClaimMonthly = async () => {
+    if (!userHasApprovedDeposit) {
+      setIsRewardsOpen(false);
+      setIsDepositOpen(true);
+      return;
+    }
+
     if (user?.id) {
       const res = await authApi.claimBonus(user.id, 'monthly');
       if (res.success && res.user) {
@@ -569,7 +587,7 @@ export default function App() {
       screenshotUrl: data.screenshotUrl,
       status: isAutoApproved ? 'APPROVED' : 'PENDING',
       aiVerified: isAutoApproved,
-      aiReason: isAutoApproved ? 'AI Verified: Transferred to Admin (849204918) within 30 minutes.' : undefined,
+      aiReason: isAutoApproved ? 'AI Verified: Transferred to Admin (1156528658) within 30 minutes.' : undefined,
       createdAt: Date.now(),
       updatedAt: isAutoApproved ? Date.now() : undefined,
     };
@@ -1063,6 +1081,8 @@ export default function App() {
         isOpen={isRewardsOpen}
         onClose={() => setIsRewardsOpen(false)}
         user={user}
+        hasDeposited={userHasApprovedDeposit}
+        onOpenDeposit={() => setIsDepositOpen(true)}
         onClaimWeekly={handleClaimWeekly}
         onClaimMonthly={handleClaimMonthly}
       />

@@ -1,10 +1,10 @@
 import { AdminSettings, DepositRequest, UserProfile, WithdrawalRequest, Round, RankedPlayer } from '../types/game';
 
 export const DEFAULT_ADMIN_SETTINGS: AdminSettings = {
-  binancePayId: '849204918',
+  binancePayId: '1156528658',
   binancePayEmail: 'admin.binance@paycrypto.com',
-  usdtBep20Address: '0x3Fa9A80B57F32b9A42Ef78A8696F89c8D11d9C54',
-  usdtTrc20Address: 'TN8tL6q3XpLwV8jKkU128H4mZ1R9wWkQ9p',
+  usdtBep20Address: '0xd1194126385ab996d60542f54e5d8f1372a4cc3e',
+  usdtTrc20Address: 'TPHsdQU9EzZYMkQRuaqYA9UkrD25h86gNU',
   minBetUSD: 0.20, // minimum bet $0.20 as requested
   minWithdrawalUSD: 10.00, // minimum withdrawal $10.00
   minDepositUSD: 5.00, // minimum deposit $5.00 as requested
@@ -25,15 +25,15 @@ export const DEFAULT_ADMIN_SETTINGS: AdminSettings = {
     {
       id: 'sp_binance_pay',
       name: 'Binance Pay ID (Official Admin)',
-      accountNumber: '849204918',
+      accountNumber: '1156528658',
       accountType: 'Binance Pay ID',
-      instructions: 'Open your Binance App, go to Pay > Send, enter Recipient ID 849204918 and transfer USD/USDT. Submit your TxID and payment screenshot.',
+      instructions: 'Open your Binance App, go to Pay > Send, enter Recipient ID 1156528658 and transfer USD/USDT. Submit your TxID and payment screenshot.',
       isActive: true,
     },
     {
       id: 'sp_usdt_trc20',
       name: 'USDT (TRC-20 Network)',
-      accountNumber: 'TN8tL6q3XpLwV8jKkU128H4mZ1R9wWkQ9p',
+      accountNumber: 'TPHsdQU9EzZYMkQRuaqYA9UkrD25h86gNU',
       accountType: 'Crypto TRC-20',
       instructions: 'Send USDT on TRON (TRC-20) network to the address above. Submit your Transaction ID (TxID) and screenshot.',
       isActive: true,
@@ -41,7 +41,7 @@ export const DEFAULT_ADMIN_SETTINGS: AdminSettings = {
     {
       id: 'sp_usdt_bep20',
       name: 'USDT (BEP-20 Network)',
-      accountNumber: '0x99A8b724f1165A68CcEc240B2f430F9',
+      accountNumber: '0xd1194126385ab996d60542f54e5d8f1372a4cc3e',
       accountType: 'Crypto BEP-20',
       instructions: 'Send USDT on BNB Smart Chain (BEP-20) network to the address above. Submit your transaction hash (TxID) and screenshot.',
       isActive: true,
@@ -62,7 +62,7 @@ export const INITIAL_USER: UserProfile = {
   totalLost: 0,
   role: 'USER',
   binancePayId: '749102381',
-  binanceAddress: '0x99A8b724f1165A68CcEc240B2f430F9',
+  binanceAddress: '0xd1194126385ab996d60542f54e5d8f1372a4cc3e',
   isSuspended: false,
   referralCode: 'SP-ALEX77',
   referralCount: 3,
@@ -80,8 +80,8 @@ export const INITIAL_ADMIN: UserProfile = {
   totalWon: 0,
   totalLost: 0,
   role: 'ADMIN',
-  binancePayId: '849204918',
-  binanceAddress: '0x3Fa9A80B57F32b9A42Ef78A8696F89c8D11d9C54',
+  binancePayId: '1156528658',
+  binanceAddress: '0xd1194126385ab996d60542f54e5d8f1372a4cc3e',
   isSuspended: false,
   createdAt: Date.now() - 86400000 * 30,
 };
@@ -95,7 +95,7 @@ export const INITIAL_DEPOSITS: DepositRequest[] = [
     binanceTxId: 'BNP94820194821',
     senderBinanceId: '749102381',
     network: 'BINANCE_PAY',
-    screenshotUrl: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='260' viewBox='0 0 400 260' fill='%23181a20'><rect width='400' height='260' rx='16' fill='%23181a20'/><circle cx='200' cy='45' r='22' fill='%230ecb81'/><path d='M192 45l5 5 11-11' stroke='white' stroke-width='3' fill='none' stroke-linecap='round'/><text x='200' y='95' fill='%23ffffff' font-family='sans-serif' font-size='18' font-weight='bold' text-anchor='middle'>Payment Successful</text><text x='200' y='125' fill='%23f0b90b' font-family='monospace' font-size='22' font-weight='bold' text-anchor='middle'>+25.00 USDT</text><line x1='30' y1='145' x2='370' y2='145' stroke='%232b313a' stroke-dasharray='4'/><text x='40' y='175' fill='%23848e9c' font-family='sans-serif' font-size='12'>Recipient ID:</text><text x='360' y='175' fill='%23ffffff' font-family='monospace' font-size='12' text-anchor='end'>849204918 (Admin)</text><text x='40' y='200' fill='%23848e9c' font-family='sans-serif' font-size='12'>TxID / Order ID:</text><text x='360' y='200' fill='%23ffffff' font-family='monospace' font-size='12' text-anchor='end'>BNP94820194821</text><text x='200' y='238' fill='%230ecb81' font-family='sans-serif' font-size='11' text-anchor='middle'>Verified by Binance Pay System</text></svg>",
+    screenshotUrl: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='260' viewBox='0 0 400 260' fill='%23181a20'><rect width='400' height='260' rx='16' fill='%23181a20'/><circle cx='200' cy='45' r='22' fill='%230ecb81'/><path d='M192 45l5 5 11-11' stroke='white' stroke-width='3' fill='none' stroke-linecap='round'/><text x='200' y='95' fill='%23ffffff' font-family='sans-serif' font-size='18' font-weight='bold' text-anchor='middle'>Payment Successful</text><text x='200' y='125' fill='%23f0b90b' font-family='monospace' font-size='22' font-weight='bold' text-anchor='middle'>+25.00 USDT</text><line x1='30' y1='145' x2='370' y2='145' stroke='%232b313a' stroke-dasharray='4'/><text x='40' y='175' fill='%23848e9c' font-family='sans-serif' font-size='12'>Recipient ID:</text><text x='360' y='175' fill='%23ffffff' font-family='monospace' font-size='12' text-anchor='end'>1156528658 (Admin)</text><text x='40' y='200' fill='%23848e9c' font-family='sans-serif' font-size='12'>TxID / Order ID:</text><text x='360' y='200' fill='%23ffffff' font-family='monospace' font-size='12' text-anchor='end'>BNP94820194821</text><text x='200' y='238' fill='%230ecb81' font-family='sans-serif' font-size='11' text-anchor='middle'>Verified by Binance Pay System</text></svg>",
     status: 'APPROVED',
     adminNote: 'Verified on Binance Pay. Balance credited.',
     createdAt: Date.now() - 3600000 * 2,
@@ -109,7 +109,7 @@ export const INITIAL_DEPOSITS: DepositRequest[] = [
     binanceTxId: 'BNP30491823901',
     senderBinanceId: '592019482',
     network: 'BINANCE_PAY',
-    screenshotUrl: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='260' viewBox='0 0 400 260' fill='%23181a20'><rect width='400' height='260' rx='16' fill='%23181a20'/><circle cx='200' cy='45' r='22' fill='%230ecb81'/><path d='M192 45l5 5 11-11' stroke='white' stroke-width='3' fill='none' stroke-linecap='round'/><text x='200' y='95' fill='%23ffffff' font-family='sans-serif' font-size='18' font-weight='bold' text-anchor='middle'>Payment Successful</text><text x='200' y='125' fill='%23f0b90b' font-family='monospace' font-size='22' font-weight='bold' text-anchor='middle'>+50.00 USDT</text><line x1='30' y1='145' x2='370' y2='145' stroke='%232b313a' stroke-dasharray='4'/><text x='40' y='175' fill='%23848e9c' font-family='sans-serif' font-size='12'>Recipient ID:</text><text x='360' y='175' fill='%23ffffff' font-family='monospace' font-size='12' text-anchor='end'>849204918 (Admin)</text><text x='40' y='200' fill='%23848e9c' font-family='sans-serif' font-size='12'>TxID / Order ID:</text><text x='360' y='200' fill='%23ffffff' font-family='monospace' font-size='12' text-anchor='end'>BNP30491823901</text><text x='200' y='238' fill='%230ecb81' font-family='sans-serif' font-size='11' text-anchor='middle'>Verified by Binance Pay System</text></svg>",
+    screenshotUrl: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='260' viewBox='0 0 400 260' fill='%23181a20'><rect width='400' height='260' rx='16' fill='%23181a20'/><circle cx='200' cy='45' r='22' fill='%230ecb81'/><path d='M192 45l5 5 11-11' stroke='white' stroke-width='3' fill='none' stroke-linecap='round'/><text x='200' y='95' fill='%23ffffff' font-family='sans-serif' font-size='18' font-weight='bold' text-anchor='middle'>Payment Successful</text><text x='200' y='125' fill='%23f0b90b' font-family='monospace' font-size='22' font-weight='bold' text-anchor='middle'>+50.00 USDT</text><line x1='30' y1='145' x2='370' y2='145' stroke='%232b313a' stroke-dasharray='4'/><text x='40' y='175' fill='%23848e9c' font-family='sans-serif' font-size='12'>Recipient ID:</text><text x='360' y='175' fill='%23ffffff' font-family='monospace' font-size='12' text-anchor='end'>1156528658 (Admin)</text><text x='40' y='200' fill='%23848e9c' font-family='sans-serif' font-size='12'>TxID / Order ID:</text><text x='360' y='200' fill='%23ffffff' font-family='monospace' font-size='12' text-anchor='end'>BNP30491823901</text><text x='200' y='238' fill='%230ecb81' font-family='sans-serif' font-size='11' text-anchor='middle'>Verified by Binance Pay System</text></svg>",
     status: 'PENDING',
     createdAt: Date.now() - 60000 * 14,
   },

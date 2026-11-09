@@ -357,10 +357,10 @@ export const ReferralModal: React.FC<ReferralModalProps> = ({
               <span>Program Rules & Wagering Terms:</span>
             </div>
             <ul className="text-[11px] text-slate-400 space-y-1 list-disc pl-4 leading-relaxed">
-              <li>Bonus is credited as <strong>$0.50 USD</strong> directly per registered friend.</li>
-              <li>Referral bonuses must be wagered (equal bet amount played in predictions) before they can be withdrawn.</li>
-              <li>New players who sign up receive a <strong>$1.00 USD</strong> welcome balance.</li>
-              <li>Minimum deposit amount is <strong>$5.00 USD</strong>.</li>
+              <li>All bonuses (Weekly, Monthly, Signup, and Referral rewards) activate after the 1st approved deposit.</li>
+              <li>Referral bonus is credited as <strong>$0.50 USD</strong> upon your friend's 1st deposit.</li>
+              <li>New players receive an instant <strong>$1.00 USD</strong> welcome signup bonus on their 1st deposit.</li>
+              <li>Minimum deposit amount is <strong>$5.00 USD</strong> via Binance Pay or USDT.</li>
             </ul>
           </div>
 

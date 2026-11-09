@@ -814,7 +814,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   const newMethod = {
                     id: `sp_custom_${Date.now()}`,
                     name: 'New Binance / USDT Method',
-                    accountNumber: '849204918',
+                    accountNumber: '1156528658',
                     accountType: 'Binance Pay ID',
                     instructions: 'Transfer funds to this account and submit your TxID and screenshot.',
                     isActive: true,

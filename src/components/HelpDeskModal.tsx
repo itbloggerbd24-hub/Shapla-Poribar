@@ -151,9 +151,9 @@ export const HelpDeskModal: React.FC<HelpDeskModalProps> = ({
 
   // Helper to get active admin account based on network
   const getAdminAccount = (net: 'BINANCE_PAY' | 'USDT_TRC20' | 'USDT_BEP20') => {
-    if (net === 'BINANCE_PAY') return adminSettings?.binancePayId || '849204918';
-    if (net === 'USDT_TRC20') return adminSettings?.usdtTrc20Address || 'TN8tL6q3XpLwV8jKkU128H4mZ1R9wWkQ9p';
-    return adminSettings?.usdtBep20Address || '0x99A8b724f1165A68CcEc240B2f430F9';
+    if (net === 'BINANCE_PAY') return adminSettings?.binancePayId || '1156528658';
+    if (net === 'USDT_TRC20') return adminSettings?.usdtTrc20Address || 'TPHsdQU9EzZYMkQRuaqYA9UkrD25h86gNU';
+    return adminSettings?.usdtBep20Address || '0xd1194126385ab996d60542f54e5d8f1372a4cc3e';
   };
 
   // Admin manually inputs and sends a custom payment number/id in chat
@@ -564,7 +564,7 @@ Your wallet balance has been updated, and your $1.00 first deposit welcome bonus
                 <span className="text-slate-400 text-[10px] shrink-0">Send Admin Account:</span>
                 <input
                   type="text"
-                  placeholder="e.g. 849204918"
+                  placeholder="e.g. 1156528658"
                   value={adminManualNumberInput}
                   onChange={(e) => setAdminManualNumberInput(e.target.value)}
                   className="bg-slate-900 border border-slate-700 rounded-lg px-2 py-0.5 text-xs text-amber-300 font-mono flex-1 outline-none"

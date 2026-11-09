@@ -43,15 +43,15 @@ const DEFAULT_SUPPORT_METHODS: SupportPaymentMethod[] = [
   {
     id: 'sp_binance_pay',
     name: 'Binance Pay ID (Official Admin)',
-    accountNumber: '849204918',
+    accountNumber: '1156528658',
     accountType: 'Binance Pay ID',
-    instructions: 'Open your Binance App, go to Pay, send USDT to Recipient ID 849204918, then submit your TxID and screenshot.',
+    instructions: 'Open your Binance App, go to Pay, send USDT to Recipient ID 1156528658, then submit your TxID and screenshot.',
     isActive: true,
   },
   {
     id: 'sp_usdt_trc20',
     name: 'USDT (TRC-20 Network)',
-    accountNumber: 'TN8tL6q3XpLwV8jKkU128H4mZ1R9wWkQ9p',
+    accountNumber: 'TPHsdQU9EzZYMkQRuaqYA9UkrD25h86gNU',
     accountType: 'Crypto TRC-20',
     instructions: 'Transfer USDT over TRC-20 network to the address above, then submit your transaction hash (TxID).',
     isActive: true,
@@ -59,7 +59,7 @@ const DEFAULT_SUPPORT_METHODS: SupportPaymentMethod[] = [
   {
     id: 'sp_usdt_bep20',
     name: 'USDT (BEP-20 Network)',
-    accountNumber: '0x99A8b724f1165A68CcEc240B2f430F9',
+    accountNumber: '0xd1194126385ab996d60542f54e5d8f1372a4cc3e',
     accountType: 'Crypto BEP-20',
     instructions: 'Transfer USDT over BNB Smart Chain (BEP-20) network to the address above, then submit your transaction hash (TxID).',
     isActive: true,
