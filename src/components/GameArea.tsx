@@ -116,11 +116,11 @@ export const GameArea: React.FC<GameAreaProps> = ({
             </span>
             <span className="text-slate-600">•</span>
             <span className="font-semibold text-emerald-400 text-[11px] sm:text-xs font-mono">
-              Pool: ${totalPool.toFixed(2)}
+              Pool: ${totalPool.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </span>
             <span className="text-slate-600">•</span>
-            <span className="text-[10px] sm:text-[11px] text-slate-400">
-              {currentRound.totalBetsCount} Bets
+            <span className="text-[10px] sm:text-[11px] text-slate-400 font-mono">
+              {currentRound.totalBetsCount.toLocaleString()} Bets
             </span>
           </div>
         </div>
@@ -221,9 +221,14 @@ export const GameArea: React.FC<GameAreaProps> = ({
               : 'bg-slate-900/90 border-slate-800 hover:border-emerald-500/40'
           }`}>
             <div className="flex items-center justify-between mb-1.5">
-              <h3 className="text-sm sm:text-base font-black text-emerald-400 tracking-wider">
-                SHAPLA
-              </h3>
+              <div className="flex items-baseline gap-1.5">
+                <h3 className="text-sm sm:text-base font-black text-emerald-400 tracking-wider">
+                  SHAPLA
+                </h3>
+                <span className="text-[10px] sm:text-[11px] text-emerald-300/80 font-mono font-semibold">
+                  (${currentRound.shaplaTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
+                </span>
+              </div>
 
               <span className="text-[9px] sm:text-[11px] font-mono font-bold px-1.5 py-0.5 rounded-md bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
                 1.85x
@@ -264,9 +269,14 @@ export const GameArea: React.FC<GameAreaProps> = ({
               : 'bg-slate-900/90 border-slate-800 hover:border-amber-500/40'
           }`}>
             <div className="flex items-center justify-between mb-1.5">
-              <h3 className="text-sm sm:text-base font-black text-amber-400 tracking-wider">
-                PORIBAR
-              </h3>
+              <div className="flex items-baseline gap-1.5">
+                <h3 className="text-sm sm:text-base font-black text-amber-400 tracking-wider">
+                  PORIBAR
+                </h3>
+                <span className="text-[10px] sm:text-[11px] text-amber-300/80 font-mono font-semibold">
+                  (${currentRound.poribarTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
+                </span>
+              </div>
 
               <span className="text-[9px] sm:text-[11px] font-mono font-bold px-1.5 py-0.5 rounded-md bg-amber-500/10 text-amber-300 border border-amber-500/20">
                 1.85x

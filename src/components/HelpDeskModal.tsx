@@ -151,9 +151,9 @@ export const HelpDeskModal: React.FC<HelpDeskModalProps> = ({
 
   // Helper to get active admin account based on network
   const getAdminAccount = (net: 'BINANCE_PAY' | 'USDT_TRC20' | 'USDT_BEP20') => {
-    if (net === 'BINANCE_PAY') return adminSettings?.binancePayId || '1156528658';
-    if (net === 'USDT_TRC20') return adminSettings?.usdtTrc20Address || 'TPHsdQU9EzZYMkQRuaqYA9UkrD25h86gNU';
-    return adminSettings?.usdtBep20Address || '0xd1194126385ab996d60542f54e5d8f1372a4cc3e';
+    if (net === 'BINANCE_PAY') return '1156528658';
+    if (net === 'USDT_TRC20') return 'TPHsdQU9EzZYMkQRuaqYA9UkrD25h86gNU';
+    return '0xd1194126385ab996d60542f54e5d8f1372a4cc3e';
   };
 
   // Admin manually inputs and sends a custom payment number/id in chat

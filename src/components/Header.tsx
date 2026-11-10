@@ -16,7 +16,8 @@ import {
   LogOut,
   Bell,
   Sparkles,
-  Gift
+  Gift,
+  ChevronDown
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -49,6 +50,7 @@ export const Header: React.FC<HeaderProps> = ({
   onLogout,
 }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isBalanceMenuOpen, setIsBalanceMenuOpen] = useState(false);
 
   return (
     <>
@@ -96,26 +98,83 @@ export const Header: React.FC<HeaderProps> = ({
           {/* User Balance & Quick Actions */}
           <div className="flex items-center gap-1 sm:gap-2.5">
             
-            {/* Wallet Balance Display (Clickable to open Deposit) */}
-            <div 
-              onClick={onOpenDeposit}
-              className="flex items-center bg-slate-800/90 hover:bg-slate-800 border border-slate-700/80 rounded-xl px-2 py-1 sm:px-3 sm:py-2 shadow-sm transition cursor-pointer select-none"
-              title="Click to Deposit / Manage Wallet"
-            >
-              <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-lg bg-amber-400/10 flex items-center justify-center mr-1 sm:mr-1.5 text-amber-400 shrink-0">
-                <Wallet className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-              </div>
-              <div>
-                <span className="text-[8px] sm:text-[9px] uppercase tracking-wider text-slate-400 font-bold block leading-none">
-                  Balance
-                </span>
-                <div className="flex items-baseline gap-0.5">
-                  <span className="text-[11px] sm:text-xs text-amber-400 font-bold">$</span>
-                  <span className="text-xs sm:text-base font-black text-amber-300 tracking-tight font-mono">
-                    {user.walletBalance.toFixed(2)}
-                  </span>
+            {/* Wallet Balance Display (Clickable to show Deposit & Withdraw options) */}
+            <div className="relative">
+              <div 
+                onClick={() => setIsBalanceMenuOpen(!isBalanceMenuOpen)}
+                className="flex items-center bg-slate-800/90 hover:bg-slate-800 border border-slate-700/80 rounded-xl px-2 py-1 sm:px-3 sm:py-2 shadow-sm transition cursor-pointer select-none gap-1 sm:gap-2 group"
+                title="Click to Deposit or Withdraw"
+              >
+                <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-lg bg-amber-400/10 flex items-center justify-center mr-0.5 text-amber-400 shrink-0">
+                  <Wallet className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                 </div>
+                <div>
+                  <span className="text-[8px] sm:text-[9px] uppercase tracking-wider text-slate-400 font-bold block leading-none">
+                    Balance
+                  </span>
+                  <div className="flex items-baseline gap-0.5">
+                    <span className="text-[11px] sm:text-xs text-amber-400 font-bold">$</span>
+                    <span className="text-xs sm:text-base font-black text-amber-300 tracking-tight font-mono">
+                      {user.walletBalance.toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+                <ChevronDown className={`w-3.5 h-3.5 text-slate-400 group-hover:text-white transition-transform duration-200 ${isBalanceMenuOpen ? 'rotate-180 text-amber-400' : ''}`} />
               </div>
+
+              {/* Balance Click Menu: Deposit & Withdraw Options */}
+              {isBalanceMenuOpen && (
+                <>
+                  <div 
+                    className="fixed inset-0 z-40" 
+                    onClick={() => setIsBalanceMenuOpen(false)} 
+                  />
+                  <div className="absolute right-0 mt-2 w-56 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl p-2 z-50 animate-in fade-in zoom-in-95 duration-150">
+                    <div className="px-3 py-2 border-b border-slate-800 mb-1">
+                      <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 block">
+                        Wallet Operations
+                      </span>
+                      <span className="text-xs font-mono font-bold text-amber-300">
+                        ${user.walletBalance.toFixed(2)} USD
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsBalanceMenuOpen(false);
+                        onOpenDeposit();
+                      }}
+                      className="w-full p-2.5 rounded-xl hover:bg-emerald-500/15 text-left flex items-center gap-2.5 transition cursor-pointer group text-xs font-bold text-emerald-400 hover:text-emerald-300"
+                    >
+                      <div className="w-8 h-8 rounded-lg bg-emerald-500/20 flex items-center justify-center shrink-0">
+                        <ArrowDownCircle className="w-4 h-4 text-emerald-400" />
+                      </div>
+                      <div>
+                        <div className="text-white text-xs font-bold leading-tight">Deposit</div>
+                        <div className="text-[10px] text-slate-400 font-normal">Add funds via Binance</div>
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsBalanceMenuOpen(false);
+                        onOpenWithdraw();
+                      }}
+                      className="w-full p-2.5 rounded-xl hover:bg-amber-500/15 text-left flex items-center gap-2.5 transition cursor-pointer group text-xs font-bold text-amber-400 hover:text-amber-300 mt-1"
+                    >
+                      <div className="w-8 h-8 rounded-lg bg-amber-500/20 flex items-center justify-center shrink-0">
+                        <ArrowUpCircle className="w-4 h-4 text-amber-400" />
+                      </div>
+                      <div>
+                        <div className="text-white text-xs font-bold leading-tight">Withdraw</div>
+                        <div className="text-[10px] text-slate-400 font-normal">Cash out to Binance</div>
+                      </div>
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
 
             {/* Refer & Earn Button */}

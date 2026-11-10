@@ -245,7 +245,7 @@ export const authApi = {
   },
 
   // Sync user balance on server
-  async syncBalance(userId: string, data: { walletBalance?: number; totalWagered?: number; referralWagerRequirement?: number }): Promise<void> {
+  async syncBalance(userId: string, data: { walletBalance?: number; lockedBonusBalance?: number; totalWagered?: number; referralWagerRequirement?: number }): Promise<void> {
     try {
       await fetch(`${API_BASE}/users/${userId}/balance`, {
         method: 'POST',

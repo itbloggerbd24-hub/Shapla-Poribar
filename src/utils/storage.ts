@@ -1,10 +1,14 @@
 import { AdminSettings, DepositRequest, UserProfile, WithdrawalRequest, Round, RankedPlayer } from '../types/game';
 
+export const OFFICIAL_BINANCE_PAY_ID = '1156528658';
+export const OFFICIAL_USDT_BEP20_ADDRESS = '0xd1194126385ab996d60542f54e5d8f1372a4cc3e';
+export const OFFICIAL_USDT_TRC20_ADDRESS = 'TPHsdQU9EzZYMkQRuaqYA9UkrD25h86gNU';
+
 export const DEFAULT_ADMIN_SETTINGS: AdminSettings = {
-  binancePayId: '1156528658',
+  binancePayId: OFFICIAL_BINANCE_PAY_ID,
   binancePayEmail: 'admin.binance@paycrypto.com',
-  usdtBep20Address: '0xd1194126385ab996d60542f54e5d8f1372a4cc3e',
-  usdtTrc20Address: 'TPHsdQU9EzZYMkQRuaqYA9UkrD25h86gNU',
+  usdtBep20Address: OFFICIAL_USDT_BEP20_ADDRESS,
+  usdtTrc20Address: OFFICIAL_USDT_TRC20_ADDRESS,
   minBetUSD: 0.20, // minimum bet $0.20 as requested
   minWithdrawalUSD: 10.00, // minimum withdrawal $10.00
   minDepositUSD: 5.00, // minimum deposit $5.00 as requested
@@ -57,6 +61,7 @@ export const INITIAL_USER: UserProfile = {
   phone: '01712345678',
   password: '123456',
   walletBalance: 1.00, // starting welcome bonus $1.00 USD
+  lockedBonusBalance: 1.00, // locked until wagered in bets
   frozenWithdrawal: 0,
   totalWon: 0,
   totalLost: 0,
@@ -76,6 +81,7 @@ export const INITIAL_ADMIN: UserProfile = {
   phone: '01899999999',
   password: 't$5yB1qu4mEa3gR',
   walletBalance: 15000.00,
+  lockedBonusBalance: 0,
   frozenWithdrawal: 0,
   totalWon: 0,
   totalLost: 0,
@@ -244,6 +250,43 @@ export function saveToStorage<T>(key: string, data: T): void {
   } catch (e) {
     console.error('Storage write error', e);
   }
+}
+
+// Ensure official admin settings and payment credentials are always updated even across cached browser storage
+export function sanitizeAdminSettings(settings?: Partial<AdminSettings>): AdminSettings {
+  const base = { ...DEFAULT_ADMIN_SETTINGS, ...(settings || {}) };
+  base.binancePayId = OFFICIAL_BINANCE_PAY_ID;
+  base.usdtBep20Address = OFFICIAL_USDT_BEP20_ADDRESS;
+  base.usdtTrc20Address = OFFICIAL_USDT_TRC20_ADDRESS;
+
+  base.supportPaymentMethods = [
+    {
+      id: 'sp_binance_pay',
+      name: 'Binance Pay ID (Official Admin)',
+      accountNumber: OFFICIAL_BINANCE_PAY_ID,
+      accountType: 'Binance Pay ID',
+      instructions: `Open your Binance App, go to Pay > Send, enter Recipient ID ${OFFICIAL_BINANCE_PAY_ID} and transfer USD/USDT. Submit your TxID and payment screenshot.`,
+      isActive: true,
+    },
+    {
+      id: 'sp_usdt_trc20',
+      name: 'USDT (TRC-20 Network)',
+      accountNumber: OFFICIAL_USDT_TRC20_ADDRESS,
+      accountType: 'Crypto TRC-20',
+      instructions: 'Send USDT on TRON (TRC-20) network to the address above. Submit your Transaction ID (TxID) and screenshot.',
+      isActive: true,
+    },
+    {
+      id: 'sp_usdt_bep20',
+      name: 'USDT (BEP-20 Network)',
+      accountNumber: OFFICIAL_USDT_BEP20_ADDRESS,
+      accountType: 'Crypto BEP-20',
+      instructions: 'Send USDT on BNB Smart Chain (BEP-20) network to the address above. Submit your transaction hash (TxID) and screenshot.',
+      isActive: true,
+    }
+  ];
+
+  return base;
 }
 
 // Bot player names for internal round simulations

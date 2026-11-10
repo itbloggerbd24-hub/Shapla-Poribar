@@ -34,6 +34,7 @@ export interface UserProfile {
   phone: string;
   password?: string;
   walletBalance: number; // in USD ($)
+  lockedBonusBalance?: number; // in USD ($) - bonus amount that must be wagered before withdrawal
   frozenWithdrawal: number;
   totalWon: number;
   totalLost: number;

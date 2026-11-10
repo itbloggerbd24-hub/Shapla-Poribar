@@ -315,7 +315,7 @@ async function startServer() {
   app.post('/api/users/:id/balance', (req, res) => {
     try {
       const { id } = req.params;
-      const { walletBalance, totalWagered, referralWagerRequirement } = req.body;
+      const { walletBalance, lockedBonusBalance, totalWagered, referralWagerRequirement } = req.body;
       const db = readDb();
 
       const userIndex = db.users.findIndex((u: any) => u.id === id);
@@ -325,6 +325,9 @@ async function startServer() {
 
       if (walletBalance !== undefined) {
         db.users[userIndex].walletBalance = Number(Number(walletBalance).toFixed(2));
+      }
+      if (lockedBonusBalance !== undefined) {
+        db.users[userIndex].lockedBonusBalance = Number(Number(lockedBonusBalance).toFixed(2));
       }
       if (totalWagered !== undefined) {
         db.users[userIndex].totalWagered = Number(Number(totalWagered).toFixed(2));
@@ -391,6 +394,7 @@ async function startServer() {
       }
 
       db.users[userIndex].walletBalance = Number(((user.walletBalance || 0) + bonusAmount).toFixed(2));
+      db.users[userIndex].lockedBonusBalance = Number(((user.lockedBonusBalance || 0) + bonusAmount).toFixed(2));
       writeDb(db);
 
       const { password: _, ...userSafe } = db.users[userIndex];

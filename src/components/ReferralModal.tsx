@@ -11,7 +11,8 @@ import {
   Flame, 
   HelpCircle,
   Coins,
-  ShieldCheck
+  ShieldCheck,
+  ArrowLeft
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -66,33 +67,36 @@ export const ReferralModal: React.FC<ReferralModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/85 backdrop-blur-md overflow-y-auto">
-      <div className="relative w-full max-w-lg bg-slate-900 border border-slate-800 rounded-3xl p-5 sm:p-7 shadow-2xl text-slate-100 my-6 max-h-[92vh] overflow-y-auto">
+    <div className="w-full max-w-4xl mx-auto space-y-4 py-2 sm:py-4">
+      <div className="relative bg-slate-900 border border-slate-800 rounded-3xl p-4 sm:p-7 shadow-2xl text-slate-100 space-y-5">
         
-        {/* Header */}
-        <div className="flex items-center justify-between pb-4 border-b border-slate-800 sticky top-0 bg-slate-900 z-10">
-          <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-amber-500 to-yellow-300 p-0.5 shadow-md flex items-center justify-center">
-              <div className="w-full h-full bg-slate-950 rounded-[14px] flex items-center justify-center text-amber-400">
-                <Gift className="w-5 h-5" />
-              </div>
-            </div>
-            <div>
-              <h2 className="text-lg font-black text-white flex items-center gap-2">
-                <span>Refer & Earn Program</span>
-                <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-bold border border-emerald-500/30">
-                  +$0.50 USD
-                </span>
-              </h2>
-              <p className="text-xs text-slate-400">Earn $0.50 for every friend + extra milestone bonuses</p>
+        {/* Back Symbol at the very corner */}
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute top-4 right-4 sm:top-6 sm:right-6 p-2.5 rounded-2xl bg-slate-800/90 hover:bg-slate-700 text-slate-300 hover:text-white transition cursor-pointer border border-slate-700 hover:border-amber-500/50 shadow-md group"
+          title="Back to Arena"
+          aria-label="Back to Arena"
+        >
+          <ArrowLeft className="w-5 h-5 text-amber-400 group-hover:-translate-x-0.5 transition-transform" />
+        </button>
+
+        {/* Page Header in a single column with text under the symbol */}
+        <div className="pb-4 sm:pb-6 border-b border-slate-800 pr-14 flex flex-col gap-2.5">
+          <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-gradient-to-tr from-amber-500 to-yellow-300 p-0.5 shadow-md flex items-center justify-center shrink-0">
+            <div className="w-full h-full bg-slate-950 rounded-[14px] flex items-center justify-center text-amber-400">
+              <Gift className="w-5 h-5 sm:w-6 sm:h-6" />
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition cursor-pointer"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="text-lg sm:text-2xl font-black text-white">Refer & Earn Program</h1>
+              <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-bold border border-emerald-500/30">
+                +$0.50 USD
+              </span>
+            </div>
+            <p className="text-xs text-slate-400 mt-1">Earn $0.50 for every friend + extra milestone bonuses</p>
+          </div>
         </div>
 
         <div className="mt-4 space-y-4">

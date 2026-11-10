@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { AdminSettings, WithdrawalRequest } from '../types/game';
+import { AdminSettings, UserProfile, WithdrawalRequest } from '../types/game';
 import { 
   X, 
+  ArrowLeft,
   ArrowUpCircle, 
   CheckCircle2, 
   AlertCircle,
@@ -16,7 +17,7 @@ interface WithdrawModalProps {
   isOpen: boolean;
   onClose: () => void;
   adminSettings: AdminSettings;
-  userBalance: number;
+  user: UserProfile;
   userWithdrawals?: WithdrawalRequest[];
   onSubmitWithdrawal: (data: {
     amountUSD: number;
@@ -29,7 +30,7 @@ export const WithdrawModal: React.FC<WithdrawModalProps> = ({
   isOpen,
   onClose,
   adminSettings,
-  userBalance,
+  user,
   onSubmitWithdrawal,
 }) => {
   const [usdAmount, setUsdAmount] = useState<number>(10.00);
@@ -37,6 +38,10 @@ export const WithdrawModal: React.FC<WithdrawModalProps> = ({
   const [targetAddress, setTargetAddress] = useState<string>('');
   const [submittedSuccess, setSubmittedSuccess] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+
+  const totalBalance = user.walletBalance;
+  const lockedBonus = user.lockedBonusBalance || 0;
+  const withdrawableBalance = Math.max(0, Number((totalBalance - lockedBonus).toFixed(2)));
   
   // Real-time withdrawal hours check (Off 10:00 PM to 10:00 AM)
   const [hoursStatus, setHoursStatus] = useState<WithdrawalHoursStatus>(() => checkWithdrawalHours());
@@ -68,8 +73,12 @@ export const WithdrawModal: React.FC<WithdrawModalProps> = ({
       return;
     }
 
-    if (usdAmount > userBalance) {
-      setError(`Insufficient wallet balance! Current balance: $${userBalance.toFixed(2)} USD.`);
+    if (usdAmount > withdrawableBalance) {
+      if (lockedBonus > 0 && usdAmount <= totalBalance) {
+        setError(`Bonus funds cannot be withdrawn directly! You must wager your bonus in bets first. Locked Bonus: $${lockedBonus.toFixed(2)} USD. Available for withdrawal: $${withdrawableBalance.toFixed(2)} USD.`);
+      } else {
+        setError(`Insufficient withdrawable balance! Available: $${withdrawableBalance.toFixed(2)} USD.`);
+      }
       return;
     }
 
@@ -93,37 +102,40 @@ export const WithdrawModal: React.FC<WithdrawModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/80 backdrop-blur-sm overflow-y-auto">
-      <div className="relative w-full max-w-lg bg-slate-900 border border-slate-800 rounded-3xl p-5 sm:p-6 shadow-2xl text-slate-100 my-8">
+    <div className="w-full max-w-4xl mx-auto space-y-4 py-2 sm:py-4">
+      <div className="relative bg-slate-900 border border-slate-800 rounded-3xl p-4 sm:p-7 shadow-2xl text-slate-100 space-y-4">
         
-        {/* Header */}
-        <div className="flex items-center justify-between pb-4 border-b border-slate-800">
-          <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
-              <ArrowUpCircle className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-lg font-black text-white">Binance Withdrawal (USD)</h2>
-                {hoursStatus.isOpen ? (
-                  <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-[10px] font-bold">
-                    Open
-                  </span>
-                ) : (
-                  <span className="px-2 py-0.5 rounded-full bg-rose-500/20 border border-rose-500/40 text-rose-300 text-[10px] font-bold">
-                    Closed
-                  </span>
-                )}
-              </div>
-              <p className="text-xs text-slate-400">Daily processing window: 10:00 AM to 10:00 PM</p>
-            </div>
+        {/* Back Symbol at the very corner */}
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute top-4 right-4 sm:top-6 sm:right-6 p-2.5 rounded-2xl bg-slate-800/90 hover:bg-slate-700 text-slate-300 hover:text-white transition cursor-pointer border border-slate-700 hover:border-amber-500/50 shadow-md group"
+          title="Back to Arena"
+          aria-label="Back to Arena"
+        >
+          <ArrowLeft className="w-5 h-5 text-amber-400 group-hover:-translate-x-0.5 transition-transform" />
+        </button>
+
+        {/* Page Header in a single column with text under the symbol */}
+        <div className="pb-4 sm:pb-6 border-b border-slate-800 pr-14 flex flex-col gap-2.5">
+          <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 shrink-0 shadow-md">
+            <ArrowUpCircle className="w-5 h-5 sm:w-6 sm:h-6" />
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition cursor-pointer"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="text-lg sm:text-2xl font-black text-white">Binance Withdrawal (USD)</h1>
+              {hoursStatus.isOpen ? (
+                <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-[10px] font-bold">
+                  Open
+                </span>
+              ) : (
+                <span className="px-2 py-0.5 rounded-full bg-rose-500/20 border border-rose-500/40 text-rose-300 text-[10px] font-bold">
+                  Closed
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-slate-400 mt-1">Daily processing window: 10:00 AM to 10:00 PM • Min $10.00 USD</p>
+          </div>
         </div>
 
         {submittedSuccess ? (
@@ -172,19 +184,45 @@ export const WithdrawModal: React.FC<WithdrawModalProps> = ({
               </div>
             )}
 
-            {/* Balance Card */}
-            <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 flex items-center justify-between">
-              <div>
-                <span className="text-xs text-slate-400 block font-medium">Available Balance:</span>
-                <span className="text-2xl font-black text-amber-400 font-mono">
-                  ${userBalance.toFixed(2)} USD
-                </span>
+            {/* Balance Card with Bonus Wager Breakdown */}
+            <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-xs text-slate-400 block font-medium">Withdrawable Balance:</span>
+                  <span className="text-2xl font-black text-emerald-400 font-mono">
+                    ${withdrawableBalance.toFixed(2)} USD
+                  </span>
+                </div>
+                <div className="text-right">
+                  <span className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider block bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20">
+                    Min $10.00
+                  </span>
+                </div>
               </div>
-              <div className="text-right">
-                <span className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider block bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20">
-                  Min $10.00
-                </span>
+
+              {/* Sub-breakdown: Total & Locked Bonus */}
+              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-800/80 text-xs">
+                <div className="bg-slate-900/80 rounded-xl p-2 border border-slate-800">
+                  <span className="text-[10px] text-slate-400 block font-medium">Total Balance</span>
+                  <span className="font-mono font-bold text-white text-xs">${totalBalance.toFixed(2)} USD</span>
+                </div>
+                <div className="bg-slate-900/80 rounded-xl p-2 border border-slate-800">
+                  <span className="text-[10px] text-amber-400/90 block font-medium flex items-center gap-1">
+                    <Lock className="w-3 h-3 text-amber-400 shrink-0" />
+                    Locked Bonus
+                  </span>
+                  <span className="font-mono font-bold text-amber-300 text-xs">${lockedBonus.toFixed(2)} USD</span>
+                </div>
               </div>
+
+              {lockedBonus > 0 && (
+                <div className="p-2 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-300/90 text-[11px] flex items-start gap-1.5 leading-snug">
+                  <AlertCircle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                  <span>
+                    Bonus funds cannot be withdrawn directly. Play bets with your bonus in the arena to unlock it into cash!
+                  </span>
+                </div>
+              )}
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -239,10 +277,10 @@ export const WithdrawModal: React.FC<WithdrawModalProps> = ({
                   </label>
                   <button
                     type="button"
-                    onClick={() => setUsdAmount(Number(userBalance.toFixed(2)))}
+                    onClick={() => setUsdAmount(Number(withdrawableBalance.toFixed(2)))}
                     className="text-xs text-amber-400 hover:underline font-bold cursor-pointer"
                   >
-                    Max (${userBalance.toFixed(2)})
+                    Max (${withdrawableBalance.toFixed(2)})
                   </button>
                 </div>
                 <div className="relative">

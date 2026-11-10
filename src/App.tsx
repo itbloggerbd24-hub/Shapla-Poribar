@@ -13,6 +13,7 @@ import {
 } from './types/game';
 import { 
   DEFAULT_ADMIN_SETTINGS, 
+  sanitizeAdminSettings,
   INITIAL_USER, 
   INITIAL_ADMIN,
   INITIAL_DEPOSITS, 
@@ -60,7 +61,7 @@ export default function App() {
     loadFromStorage('all_users_usd', [INITIAL_USER, INITIAL_ADMIN])
   );
   const [adminSettings, setAdminSettings] = useState<AdminSettings>(() => 
-    loadFromStorage('admin_settings_usd', DEFAULT_ADMIN_SETTINGS)
+    sanitizeAdminSettings(loadFromStorage('admin_settings_usd', DEFAULT_ADMIN_SETTINGS))
   );
   const [deposits, setDeposits] = useState<DepositRequest[]>(() => 
     loadFromStorage('deposits_usd', INITIAL_DEPOSITS)
@@ -75,19 +76,23 @@ export default function App() {
     loadFromStorage('rankings_data_usd', INITIAL_RANKINGS)
   );
   const [allBets, setAllBets] = useState<Bet[]>(() => loadFromStorage('all_bets_usd', []));
+  const allBetsRef = useRef<Bet[]>(allBets);
+  useEffect(() => {
+    allBetsRef.current = allBets;
+  }, [allBets]);
 
-  // Current active round (30-second duration)
+  // Current active round (30-second duration) with high-volume display pool
   const [currentRound, setCurrentRound] = useState<Round>(() => ({
     id: 1045,
     startTime: Date.now(),
     endTime: Date.now() + 30 * 1000,
     status: 'BETTING',
     winner: null,
-    shaplaTotal: 18.50,
-    poribarTotal: 26.20,
+    shaplaTotal: 1845.50,
+    poribarTotal: 2310.20,
     platformFeePercent: DEFAULT_ADMIN_SETTINGS.platformFeePercent,
     winnerMultiplier: 1.85,
-    totalBetsCount: 14,
+    totalBetsCount: 428,
     settled: false,
   }));
 
@@ -156,7 +161,7 @@ export default function App() {
 
     authApi.fetchSettings().then((fetchedSettings) => {
       if (fetchedSettings) {
-        setAdminSettings((prev) => ({ ...prev, ...fetchedSettings }));
+        setAdminSettings((prev) => sanitizeAdminSettings({ ...prev, ...fetchedSettings }));
       }
     });
 
@@ -273,6 +278,7 @@ export default function App() {
       const next = {
         ...u,
         walletBalance: Number((u.walletBalance + 0.50).toFixed(2)),
+        lockedBonusBalance: Number(((u.lockedBonusBalance || 0) + 0.50).toFixed(2)),
         lastWeeklyClaim: Date.now(),
       };
       saveToStorage('active_user_session', next);
@@ -302,6 +308,7 @@ export default function App() {
       const next = {
         ...u,
         walletBalance: Number((u.walletBalance + 1.00).toFixed(2)),
+        lockedBonusBalance: Number(((u.lockedBonusBalance || 0) + 1.00).toFixed(2)),
         lastMonthlyClaim: Date.now(),
       };
       saveToStorage('active_user_session', next);
@@ -309,19 +316,44 @@ export default function App() {
     });
   };
 
-  // Round Resolution: House edge algorithm (lesser amount pool wins)
+  // Round Resolution: Strictly calculated based on REAL user bets staked in this round
   const resolveRound = useCallback(() => {
     setCurrentRound((prev) => {
       if (prev.settled) return prev;
 
       let winningOption: OptionType;
 
+      // Extract real user bets placed in this round (excluding simulated bots)
+      const currentRoundBets = allBetsRef.current.filter(
+        (b) => b.roundId === prev.id && b.status === 'PENDING'
+      );
+      const realBets = currentRoundBets.filter((b) => !b.userId.startsWith('bot_'));
+
+      const realShaplaTotal = realBets
+        .filter((b) => b.option === 'SHAPLA')
+        .reduce((sum, b) => sum + b.amount, 0);
+
+      const realPoribarTotal = realBets
+        .filter((b) => b.option === 'PORIBAR')
+        .reduce((sum, b) => sum + b.amount, 0);
+
       if (adminSettings.forcedOutcome === 'FORCE_SHAPLA') {
         winningOption = 'SHAPLA';
       } else if (adminSettings.forcedOutcome === 'FORCE_PORIBAR') {
         winningOption = 'PORIBAR';
+      } else if (realShaplaTotal > 0 || realPoribarTotal > 0) {
+        // STRICT USER RULE: Calculate strictly by real bet amount!
+        // Whichever side has LESS real bet money WINS! Whichever side has MORE LOSES!
+        if (realShaplaTotal < realPoribarTotal) {
+          winningOption = 'SHAPLA';
+        } else if (realPoribarTotal < realShaplaTotal) {
+          winningOption = 'PORIBAR';
+        } else {
+          // Exactly tied real bets: side with lesser display pool wins
+          winningOption = prev.shaplaTotal <= prev.poribarTotal ? 'SHAPLA' : 'PORIBAR';
+        }
       } else {
-        // Lesser pool amount wins!
+        // No real bets placed in this round: follow lesser display pool or 50/50
         if (prev.shaplaTotal < prev.poribarTotal) {
           winningOption = 'SHAPLA';
         } else if (prev.poribarTotal < prev.shaplaTotal) {
@@ -444,9 +476,10 @@ export default function App() {
         if (currentRound.status === 'RESULT') {
           if (prevTime <= 1) {
             const nextRoundId = currentRound.id + 1;
-            // Seed next 30s round with small initial organic USD bets
-            const seedShapla = Number((Math.floor(Math.random() * 5 + 3) * 2.5).toFixed(2));
-            const seedPoribar = Number((Math.floor(Math.random() * 5 + 4) * 2.5).toFixed(2));
+            // Seed next 30s round with high volume display pools ($1,400 - $2,600+) and ~320-480 bets for trust & realism
+            const seedShapla = Number((1400 + Math.random() * 950).toFixed(2));
+            const seedPoribar = Number((1450 + Math.random() * 980).toFixed(2));
+            const seedBets = Math.floor(320 + Math.random() * 160);
 
             setCurrentRound({
               id: nextRoundId,
@@ -458,7 +491,7 @@ export default function App() {
               poribarTotal: seedPoribar,
               platformFeePercent: adminSettings.platformFeePercent,
               winnerMultiplier: 1.85,
-              totalBetsCount: 6,
+              totalBetsCount: seedBets,
               settled: false,
             });
             return 30; // reset to 30 seconds
@@ -473,15 +506,16 @@ export default function App() {
     return () => clearInterval(timer);
   }, [currentRound.status, currentRound.id, adminSettings, resolveRound]);
 
-  // Internal organic bot bets in USD ($)
+  // High-volume active simulation in USD ($) during BETTING (Keeps memory lightweight and performant)
   useEffect(() => {
     if (currentRound.status !== 'BETTING') return;
 
     const botInterval = setInterval(() => {
       const randomBot = BOT_PLAYERS[Math.floor(Math.random() * BOT_PLAYERS.length)];
       const targetOption: OptionType = Math.random() > 0.5 ? 'SHAPLA' : 'PORIBAR';
-      const botAmounts = [0.50, 1.00, 2.00, 5.00, 10.00];
+      const botAmounts = [15.00, 25.00, 35.00, 50.00, 75.00, 100.00, 125.00];
       const botAmount = botAmounts[Math.floor(Math.random() * botAmounts.length)];
+      const extraBets = Math.floor(Math.random() * 3) + 1;
 
       const newBotBet: Bet = {
         id: `bet_bot_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
@@ -494,14 +528,14 @@ export default function App() {
         status: 'PENDING',
       };
 
-      setAllBets((prev) => [newBotBet, ...prev.slice(0, 100)]);
+      setAllBets((prev) => [newBotBet, ...prev.slice(0, 99)]);
       setCurrentRound((prev) => ({
         ...prev,
         shaplaTotal: Number((targetOption === 'SHAPLA' ? prev.shaplaTotal + botAmount : prev.shaplaTotal).toFixed(2)),
         poribarTotal: Number((targetOption === 'PORIBAR' ? prev.poribarTotal + botAmount : prev.poribarTotal).toFixed(2)),
-        totalBetsCount: prev.totalBetsCount + 1,
+        totalBetsCount: prev.totalBetsCount + extraBets,
       }));
-    }, 2800);
+    }, 1800);
 
     return () => clearInterval(botInterval);
   }, [currentRound.status, currentRound.id]);
@@ -527,9 +561,11 @@ export default function App() {
       const newReq = prev.referralWagerRequirement 
         ? Math.max(0, Number((prev.referralWagerRequirement - roundedAmount).toFixed(2))) 
         : 0;
+      const newLockedBonus = Math.max(0, Number(((prev.lockedBonusBalance || 0) - roundedAmount).toFixed(2)));
       const next = {
         ...prev,
         walletBalance: nextBal,
+        lockedBonusBalance: newLockedBonus,
         totalLost: Number((prev.totalLost + roundedAmount).toFixed(2)),
         totalWagered: newWagered,
         referralWagerRequirement: newReq,
@@ -643,6 +679,12 @@ export default function App() {
     const hours = checkWithdrawalHours();
     if (!hours.isOpen) {
       alert('Withdrawal service is currently closed (10:00 PM to 10:00 AM). Requests resume at 10:00 AM.');
+      return;
+    }
+
+    const withdrawableBalance = Math.max(0, Number((user.walletBalance - (user.lockedBonusBalance || 0)).toFixed(2)));
+    if (data.amountUSD > withdrawableBalance) {
+      alert(`Bonus funds cannot be withdrawn directly! Play bets with your bonus to unlock it into withdrawable cash. Available: $${withdrawableBalance.toFixed(2)} USD.`);
       return;
     }
 
@@ -914,12 +956,52 @@ export default function App() {
       {/* Header (Quick Notification Icon replaces sound on header bar) */}
       <Header
         user={user}
-        onOpenDeposit={() => setIsDepositOpen(true)}
-        onOpenWithdraw={() => setIsWithdrawOpen(true)}
-        onOpenRules={() => setIsRulesOpen(true)}
-        onOpenReferral={() => setIsReferralOpen(true)}
-        onOpenRewards={() => setIsRewardsOpen(true)}
+        onOpenDeposit={() => {
+          setIsNotificationOpen(false);
+          setIsWithdrawOpen(false);
+          setIsRulesOpen(false);
+          setIsReferralOpen(false);
+          setIsRewardsOpen(false);
+          setIsDepositOpen(true);
+        }}
+        onOpenWithdraw={() => {
+          setIsDepositOpen(false);
+          setIsNotificationOpen(false);
+          setIsRulesOpen(false);
+          setIsReferralOpen(false);
+          setIsRewardsOpen(false);
+          setIsWithdrawOpen(true);
+        }}
+        onOpenRules={() => {
+          setIsDepositOpen(false);
+          setIsWithdrawOpen(false);
+          setIsNotificationOpen(false);
+          setIsReferralOpen(false);
+          setIsRewardsOpen(false);
+          setIsRulesOpen(true);
+        }}
+        onOpenReferral={() => {
+          setIsDepositOpen(false);
+          setIsWithdrawOpen(false);
+          setIsNotificationOpen(false);
+          setIsRulesOpen(false);
+          setIsRewardsOpen(false);
+          setIsReferralOpen(true);
+        }}
+        onOpenRewards={() => {
+          setIsDepositOpen(false);
+          setIsWithdrawOpen(false);
+          setIsNotificationOpen(false);
+          setIsRulesOpen(false);
+          setIsReferralOpen(false);
+          setIsRewardsOpen(true);
+        }}
         onOpenNotifications={() => {
+          setIsDepositOpen(false);
+          setIsWithdrawOpen(false);
+          setIsRulesOpen(false);
+          setIsReferralOpen(false);
+          setIsRewardsOpen(false);
           setIsNotificationOpen(true);
           setNotifications((prev) => {
             const updated = prev.map((n) => ({ ...n, isRead: true }));
@@ -930,7 +1012,15 @@ export default function App() {
         unreadNoticeCount={notifications.filter((n) => !n.isRead).length}
         isMuted={isMuted}
         onToggleSound={handleToggleSound}
-        onLogoClick={handleLogoClick}
+        onLogoClick={() => {
+          setIsDepositOpen(false);
+          setIsWithdrawOpen(false);
+          setIsNotificationOpen(false);
+          setIsRulesOpen(false);
+          setIsReferralOpen(false);
+          setIsRewardsOpen(false);
+          handleLogoClick();
+        }}
         onLogout={handleLogout}
       />
 
@@ -977,6 +1067,67 @@ export default function App() {
               }
             }}
           />
+        ) : isDepositOpen ? (
+          /* Dedicated Full Page Deposit View */
+          <DepositModal
+            isOpen={true}
+            onClose={() => setIsDepositOpen(false)}
+            adminSettings={adminSettings}
+            userDeposits={deposits.filter((d) => d.userId === user.id)}
+            onSubmitDeposit={handleSubmitDeposit}
+          />
+        ) : isWithdrawOpen ? (
+          /* Dedicated Full Page Withdraw View */
+          <WithdrawModal
+            isOpen={true}
+            onClose={() => setIsWithdrawOpen(false)}
+            adminSettings={adminSettings}
+            user={user}
+            onSubmitWithdrawal={handleSubmitWithdrawal}
+          />
+        ) : isNotificationOpen ? (
+          /* Dedicated Full Page Notification View */
+          <NotificationModal
+            isOpen={true}
+            onClose={() => setIsNotificationOpen(false)}
+            notifications={notifications}
+            quickNotice={adminSettings.quickNotice}
+            onOpenDeposit={() => {
+              setIsNotificationOpen(false);
+              setIsDepositOpen(true);
+            }}
+            onOpenReferral={() => {
+              setIsNotificationOpen(false);
+              setIsReferralOpen(true);
+            }}
+          />
+        ) : isRulesOpen ? (
+          /* Dedicated Full Page Rules & Guide View */
+          <RulesModal
+            isOpen={true}
+            onClose={() => setIsRulesOpen(false)}
+          />
+        ) : isReferralOpen ? (
+          /* Dedicated Full Page Referral View */
+          <ReferralModal
+            isOpen={true}
+            onClose={() => setIsReferralOpen(false)}
+            user={user}
+          />
+        ) : isRewardsOpen ? (
+          /* Dedicated Full Page Daily Rewards View */
+          <DailyRewardsModal
+            isOpen={true}
+            onClose={() => setIsRewardsOpen(false)}
+            user={user}
+            hasDeposited={userHasApprovedDeposit}
+            onOpenDeposit={() => {
+              setIsRewardsOpen(false);
+              setIsDepositOpen(true);
+            }}
+            onClaimWeekly={handleClaimWeekly}
+            onClaimMonthly={handleClaimMonthly}
+          />
         ) : (
           /* Public Website View */
           <div className="space-y-3 sm:space-y-5">
@@ -989,7 +1140,14 @@ export default function App() {
               userBalance={user.walletBalance}
               userCurrentBets={userCurrentBets}
               onPlaceBet={handlePlaceBet}
-              onOpenDeposit={() => setIsDepositOpen(true)}
+              onOpenDeposit={() => {
+                setIsNotificationOpen(false);
+                setIsWithdrawOpen(false);
+                setIsRulesOpen(false);
+                setIsReferralOpen(false);
+                setIsRewardsOpen(false);
+                setIsDepositOpen(true);
+              }}
             />
 
             {/* Leaderboard and Earnings Rankings + Personal Bets & Wallet tabs in USD */}
@@ -1046,56 +1204,6 @@ export default function App() {
           </div>
         </div>
       )}
-
-      {/* Public Modals */}
-      <DepositModal
-        isOpen={isDepositOpen}
-        onClose={() => setIsDepositOpen(false)}
-        adminSettings={adminSettings}
-        userDeposits={deposits.filter((d) => d.userId === user.id)}
-        onSubmitDeposit={handleSubmitDeposit}
-      />
-
-      <WithdrawModal
-        isOpen={isWithdrawOpen}
-        onClose={() => setIsWithdrawOpen(false)}
-        adminSettings={adminSettings}
-        userBalance={user.walletBalance}
-        onSubmitWithdrawal={handleSubmitWithdrawal}
-      />
-
-      <RulesModal
-        isOpen={isRulesOpen}
-        onClose={() => setIsRulesOpen(false)}
-      />
-
-      {/* Refer & Earn Friends Bonus Modal */}
-      <ReferralModal
-        isOpen={isReferralOpen}
-        onClose={() => setIsReferralOpen(false)}
-        user={user}
-      />
-
-      {/* Free Recurring Weekly ($0.50) & Monthly ($1.00) Bonus Modal */}
-      <DailyRewardsModal
-        isOpen={isRewardsOpen}
-        onClose={() => setIsRewardsOpen(false)}
-        user={user}
-        hasDeposited={userHasApprovedDeposit}
-        onOpenDeposit={() => setIsDepositOpen(true)}
-        onClaimWeekly={handleClaimWeekly}
-        onClaimMonthly={handleClaimMonthly}
-      />
-
-      {/* Quick Notifications & Notice Modal */}
-      <NotificationModal
-        isOpen={isNotificationOpen}
-        onClose={() => setIsNotificationOpen(false)}
-        notifications={notifications}
-        quickNotice={adminSettings.quickNotice}
-        onOpenDeposit={() => setIsDepositOpen(true)}
-        onOpenReferral={() => setIsReferralOpen(true)}
-      />
 
       {/* 24/7 Live Agent Web Message Help Desk with in-chat Deposit & Agent Maya Verification */}
       <HelpDeskModal

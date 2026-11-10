@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { AdminSettings, DepositRequest, SupportPaymentMethod } from '../types/game';
 import { 
   X, 
+  ArrowLeft,
   Copy, 
   Check, 
   QrCode, 
@@ -21,6 +22,12 @@ import {
   Info
 } from 'lucide-react';
 
+import { 
+  OFFICIAL_BINANCE_PAY_ID, 
+  OFFICIAL_USDT_BEP20_ADDRESS, 
+  OFFICIAL_USDT_TRC20_ADDRESS 
+} from '../utils/storage';
+
 interface DepositModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -39,19 +46,25 @@ interface DepositModalProps {
   onOpenHelpDesk?: () => void;
 }
 
+const getDepositTargetAddress = (net: 'BINANCE_PAY' | 'USDT_BEP20' | 'USDT_TRC20') => {
+  if (net === 'BINANCE_PAY') return OFFICIAL_BINANCE_PAY_ID;
+  if (net === 'USDT_BEP20') return OFFICIAL_USDT_BEP20_ADDRESS;
+  return OFFICIAL_USDT_TRC20_ADDRESS;
+};
+
 const DEFAULT_SUPPORT_METHODS: SupportPaymentMethod[] = [
   {
     id: 'sp_binance_pay',
     name: 'Binance Pay ID (Official Admin)',
-    accountNumber: '1156528658',
+    accountNumber: OFFICIAL_BINANCE_PAY_ID,
     accountType: 'Binance Pay ID',
-    instructions: 'Open your Binance App, go to Pay, send USDT to Recipient ID 1156528658, then submit your TxID and screenshot.',
+    instructions: `Open your Binance App, go to Pay, send USDT to Recipient ID ${OFFICIAL_BINANCE_PAY_ID}, then submit your TxID and screenshot.`,
     isActive: true,
   },
   {
     id: 'sp_usdt_trc20',
     name: 'USDT (TRC-20 Network)',
-    accountNumber: 'TPHsdQU9EzZYMkQRuaqYA9UkrD25h86gNU',
+    accountNumber: OFFICIAL_USDT_TRC20_ADDRESS,
     accountType: 'Crypto TRC-20',
     instructions: 'Transfer USDT over TRC-20 network to the address above, then submit your transaction hash (TxID).',
     isActive: true,
@@ -59,7 +72,7 @@ const DEFAULT_SUPPORT_METHODS: SupportPaymentMethod[] = [
   {
     id: 'sp_usdt_bep20',
     name: 'USDT (BEP-20 Network)',
-    accountNumber: '0xd1194126385ab996d60542f54e5d8f1372a4cc3e',
+    accountNumber: OFFICIAL_USDT_BEP20_ADDRESS,
     accountType: 'Crypto BEP-20',
     instructions: 'Transfer USDT over BNB Smart Chain (BEP-20) network to the address above, then submit your transaction hash (TxID).',
     isActive: true,
@@ -215,28 +228,36 @@ export const DepositModal: React.FC<DepositModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/80 backdrop-blur-sm overflow-y-auto">
-      <div className="relative w-full max-w-xl bg-slate-900 border border-slate-800 rounded-3xl p-5 sm:p-6 shadow-2xl text-slate-100 my-6 max-h-[92vh] overflow-y-auto">
+    <div className="w-full max-w-4xl mx-auto space-y-4 py-2 sm:py-4">
+      <div className="relative bg-slate-900 border border-slate-800 rounded-3xl p-4 sm:p-7 shadow-2xl text-slate-100">
         
-        {/* Header */}
-        <div className="flex items-center justify-between pb-4 border-b border-slate-800 sticky top-0 bg-slate-900 z-20">
-          <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 p-0.5 flex items-center justify-center shadow-md">
-              <div className="w-full h-full bg-slate-950 rounded-[10px] flex items-center justify-center text-emerald-400 font-bold">
-                <Wallet className="w-5 h-5" />
-              </div>
-            </div>
-            <div>
-              <h2 className="text-lg font-black text-white">Deposit USD (Binance)</h2>
-              <p className="text-xs text-slate-400">Min $5.00 USD • Get $1.00 FREE welcome bonus on 1st deposit!</p>
+        {/* Back Symbol at the very corner */}
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute top-4 right-4 sm:top-6 sm:right-6 p-2.5 rounded-2xl bg-slate-800/90 hover:bg-slate-700 text-slate-300 hover:text-white transition cursor-pointer border border-slate-700 hover:border-emerald-500/50 shadow-md group"
+          title="Back to Arena"
+          aria-label="Back to Arena"
+        >
+          <ArrowLeft className="w-5 h-5 text-emerald-400 group-hover:-translate-x-0.5 transition-transform" />
+        </button>
+
+        {/* Page Header in a single column with text under the symbol */}
+        <div className="pb-4 sm:pb-6 border-b border-slate-800 pr-14 flex flex-col gap-2.5">
+          <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-400 p-0.5 flex items-center justify-center shadow-lg shadow-emerald-500/20 shrink-0">
+            <div className="w-full h-full bg-slate-950 rounded-[14px] flex items-center justify-center text-emerald-400 font-bold">
+              <Wallet className="w-5 h-5 sm:w-6 sm:h-6" />
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition cursor-pointer"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="text-lg sm:text-2xl font-black text-white">Deposit Funds (Binance / USDT)</h1>
+              <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-[10px] font-bold">
+                Instant
+              </span>
+            </div>
+            <p className="text-xs text-slate-400 mt-1">Min $5.00 USD • $1.00 instant bonus on 1st approved deposit</p>
+          </div>
         </div>
 
         {/* Deposit Methods Tab Switcher */}
@@ -384,22 +405,14 @@ export const DepositModal: React.FC<DepositModalProps> = ({
                         {network === 'BINANCE_PAY' ? 'Official Admin Binance Pay ID' : `${network} Address`}
                       </span>
                       <span className="text-xs sm:text-sm font-mono font-bold text-amber-300 truncate block">
-                        {network === 'BINANCE_PAY'
-                          ? adminSettings.binancePayId
-                          : network === 'USDT_BEP20'
-                          ? adminSettings.usdtBep20Address
-                          : adminSettings.usdtTrc20Address}
+                        {getDepositTargetAddress(network)}
                       </span>
                     </div>
                     <button
                       type="button"
                       onClick={() =>
                         copyToClipboard(
-                          network === 'BINANCE_PAY'
-                            ? adminSettings.binancePayId
-                            : network === 'USDT_BEP20'
-                            ? adminSettings.usdtBep20Address
-                            : adminSettings.usdtTrc20Address,
+                          getDepositTargetAddress(network),
                           'admin_addr'
                         )
                       }
