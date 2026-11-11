@@ -225,9 +225,6 @@ export const GameArea: React.FC<GameAreaProps> = ({
                 <h3 className="text-sm sm:text-base font-black text-emerald-400 tracking-wider">
                   SHAPLA
                 </h3>
-                <span className="text-[10px] sm:text-[11px] text-emerald-300/80 font-mono font-semibold">
-                  (${currentRound.shaplaTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
-                </span>
               </div>
 
               <span className="text-[9px] sm:text-[11px] font-mono font-bold px-1.5 py-0.5 rounded-md bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
@@ -273,9 +270,6 @@ export const GameArea: React.FC<GameAreaProps> = ({
                 <h3 className="text-sm sm:text-base font-black text-amber-400 tracking-wider">
                   PORIBAR
                 </h3>
-                <span className="text-[10px] sm:text-[11px] text-amber-300/80 font-mono font-semibold">
-                  (${currentRound.poribarTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
-                </span>
               </div>
 
               <span className="text-[9px] sm:text-[11px] font-mono font-bold px-1.5 py-0.5 rounded-md bg-amber-500/10 text-amber-300 border border-amber-500/20">

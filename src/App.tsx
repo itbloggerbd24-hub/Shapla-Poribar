@@ -170,6 +170,16 @@ export default function App() {
         setNotifications(fetchedNotifs);
       }
     });
+
+    authApi.fetchBets(currentUser?.id).then((fetchedBets) => {
+      if (fetchedBets && fetchedBets.length > 0) {
+        setAllBets((prev) => {
+          const existingIds = new Set(prev.map((b) => b.id));
+          const newOnes = fetchedBets.filter((b: any) => !existingIds.has(b.id));
+          return [...newOnes, ...prev];
+        });
+      }
+    });
   }, [currentUser?.id]);
 
   const handlePublishNotice = async (title: string, message: string, badge?: string) => {
@@ -424,6 +434,8 @@ export default function App() {
         settled: true,
       };
 
+      authApi.resolveBets(prev.id, winningOption, 1 + (adminSettings.winnerProfitPercent / 100));
+
       setRoundsHistory((history) => [finishedRound, ...history.slice(0, 30)]);
 
       // Dynamically increment leaderboard earnings slightly for realism
@@ -586,6 +598,7 @@ export default function App() {
     };
 
     setAllBets((prev) => [newBet, ...prev]);
+    authApi.recordBet(newBet);
 
     setCurrentRound((prev) => ({
       ...prev,

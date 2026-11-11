@@ -54,6 +54,9 @@ export interface UserProfile {
   lastMonthlyClaim?: number;
   firstDepositDone?: boolean;
   pendingReferralBonus?: number;
+  nid?: string;
+  securityQuestion?: string;
+  securityAnswer?: string;
   createdAt?: number;
 }
 

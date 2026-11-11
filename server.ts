@@ -83,11 +83,19 @@ async function startServer() {
     return String(phone || '').replace(/[\s\-\(\)\+]/g, '');
   };
 
+  // In-memory verification codes store: phone -> { code: string, expiresAt: number }
+  const verificationCodes: Record<string, { code: string; expiresAt: number }> = {};
+
   // Ensure initial data such as demo account 01883239867
   const ensureInitialData = () => {
     try {
       const db = readDb();
       let changed = false;
+
+      if (!db.bets) {
+        db.bets = [];
+        changed = true;
+      }
 
       // Demo test user requested by user: 01883239867 / 635366
       const demoPhone = '01883239867';
@@ -103,6 +111,9 @@ async function startServer() {
           totalWon: 0,
           totalLost: 0,
           role: 'USER',
+          nid: '19985672819401',
+          securityQuestion: "What is your childhood nickname?",
+          securityAnswer: "shanto",
           binancePayId: '1156528658',
           binanceAddress: '',
           referralCode: 'SP-DEMO88',
@@ -116,10 +127,31 @@ async function startServer() {
         });
         changed = true;
       } else {
-        if (db.users[demoUserIndex].password !== '635366') {
-          db.users[demoUserIndex].password = '635366';
+        const u = db.users[demoUserIndex];
+        if (u.password !== '635366') {
+          u.password = '635366';
           changed = true;
         }
+        if (!u.nid) {
+          u.nid = '19985672819401';
+          changed = true;
+        }
+        if (!u.securityQuestion) {
+          u.securityQuestion = "What is your childhood nickname?";
+          changed = true;
+        }
+        if (!u.securityAnswer) {
+          u.securityAnswer = "shanto";
+          changed = true;
+        }
+      }
+
+      // Ensure Alex Hunter has NID & security question
+      const alex = db.users.find((u: any) => normalizePhone(u.phone) === '01712345678');
+      if (alex) {
+        if (!alex.nid) { alex.nid = '19954718294012'; changed = true; }
+        if (!alex.securityQuestion) { alex.securityQuestion = "What is your mother's maiden name?"; changed = true; }
+        if (!alex.securityAnswer) { alex.securityAnswer = 'khatun'; changed = true; }
       }
 
       if (changed) {
@@ -132,26 +164,128 @@ async function startServer() {
 
   ensureInitialData();
 
-  // 1. REGISTER: Enforce exactly 1 account per phone number + $1.00 welcome bonus + referral bonus
+  // 1. SEND PHONE VERIFICATION CODE (SMS / OTP)
+  app.post('/api/auth/send-verification-code', (req, res) => {
+    try {
+      const { phone } = req.body;
+      if (!phone) {
+        return res.status(400).json({ error: 'Phone number is required.' });
+      }
+
+      const cleanPhone = normalizePhone(phone);
+      if (cleanPhone.length < 8) {
+        return res.status(400).json({ error: 'Please enter a valid phone number (at least 8 digits).' });
+      }
+
+      const db = readDb();
+      const existing = db.users.find((u: any) => normalizePhone(u.phone) === cleanPhone);
+      if (existing) {
+        return res.status(400).json({ 
+          error: 'An account is already registered with this phone number. Please sign in or reset your password.' 
+        });
+      }
+
+      // Generate 6-digit numeric verification code
+      const code = Math.floor(100000 + Math.random() * 900000).toString();
+      verificationCodes[cleanPhone] = {
+        code,
+        expiresAt: Date.now() + 5 * 60 * 1000, // 5 minutes
+      };
+
+      return res.json({
+        success: true,
+        message: `Verification code sent to ${phone}.`,
+        code, // Returned for simulated SMS prompt in UI
+        expiresInSeconds: 300,
+      });
+    } catch (err: any) {
+      console.error('Send verification code error:', err);
+      return res.status(500).json({ error: 'Failed to send verification code.' });
+    }
+  });
+
+  // 2. VERIFY PHONE CODE
+  app.post('/api/auth/verify-code', (req, res) => {
+    try {
+      const { phone, code } = req.body;
+      if (!phone || !code) {
+        return res.status(400).json({ error: 'Phone number and verification code are required.' });
+      }
+
+      const cleanPhone = normalizePhone(phone);
+      const entry = verificationCodes[cleanPhone];
+
+      if (!entry || Date.now() > entry.expiresAt) {
+        return res.status(400).json({ error: 'Verification code has expired or does not exist. Please request a new code.' });
+      }
+
+      if (entry.code !== String(code).trim()) {
+        return res.status(400).json({ error: 'Invalid 6-digit verification code. Please check and try again.' });
+      }
+
+      return res.json({ success: true, message: 'Phone number verified successfully.' });
+    } catch (err: any) {
+      return res.status(500).json({ error: 'Verification error.' });
+    }
+  });
+
+  // 3. REGISTER: Phone verified + NID + Security Question & Answer + Exactly 1 account per phone & NID
   app.post('/api/auth/register', (req, res) => {
     try {
-      const { name, phone, password, binancePayId, referralCode } = req.body;
+      const { 
+        name, 
+        phone, 
+        password, 
+        nid, 
+        securityQuestion, 
+        securityAnswer, 
+        verificationCode, 
+        binancePayId, 
+        referralCode 
+      } = req.body;
+
       if (!name || !phone || !password) {
         return res.status(400).json({ error: 'Name, phone number, and password are required.' });
       }
 
+      if (!nid || String(nid).trim().length < 8) {
+        return res.status(400).json({ error: 'A valid National ID (NID) number is required (min 8 digits).' });
+      }
+
+      if (!securityQuestion || !securityAnswer || String(securityAnswer).trim().length < 2) {
+        return res.status(400).json({ error: 'Security question and answer are required for account security.' });
+      }
+
       const cleanPhone = normalizePhone(phone);
-      if (cleanPhone.length < 6) {
+      if (cleanPhone.length < 8) {
         return res.status(400).json({ error: 'Please enter a valid phone number.' });
+      }
+
+      // Check verification code
+      const entry = verificationCodes[cleanPhone];
+      if (!entry || Date.now() > entry.expiresAt) {
+        return res.status(400).json({ error: 'Please request and verify your phone number with the 6-digit SMS code.' });
+      }
+      if (entry.code !== String(verificationCode).trim()) {
+        return res.status(400).json({ error: 'Invalid verification code. Please enter the correct 6-digit code.' });
       }
 
       const db = readDb();
 
-      // Check if account already exists with this phone number
-      const existing = db.users.find((u: any) => normalizePhone(u.phone) === cleanPhone);
-      if (existing) {
+      // Check if phone already registered
+      const existingPhone = db.users.find((u: any) => normalizePhone(u.phone) === cleanPhone);
+      if (existingPhone) {
         return res.status(400).json({ 
-          error: 'An account is already registered with this phone number. Multiple accounts with the same number are not permitted.' 
+          error: 'An account is already registered with this phone number. Multiple accounts are not permitted.' 
+        });
+      }
+
+      // Check if NID already registered
+      const cleanNid = String(nid).trim();
+      const existingNid = db.users.find((u: any) => String(u.nid || '').trim() === cleanNid);
+      if (existingNid) {
+        return res.status(400).json({ 
+          error: 'An account is already registered with this NID number. Each user may only have one account.' 
         });
       }
 
@@ -164,7 +298,10 @@ async function startServer() {
         name: cleanName,
         phone: String(phone).trim(),
         password: String(password).trim(),
-        walletBalance: 0.00, // Starts at 0; $1.00 welcome bonus unlocks upon first deposit
+        nid: cleanNid,
+        securityQuestion: String(securityQuestion).trim(),
+        securityAnswer: String(securityAnswer).trim().toLowerCase(),
+        walletBalance: 0.00, // Starts at 0; $1.00 welcome bonus unlocks upon 1st approved deposit
         frozenWithdrawal: 0,
         totalWon: 0,
         totalLost: 0,
@@ -180,11 +317,15 @@ async function startServer() {
         firstDepositDone: false,
         lastDailyClaim: 0,
         lastWeeklyClaim: 0,
+        lastMonthlyClaim: 0,
         isSuspended: false,
         createdAt: Date.now(),
       };
 
       db.users.push(newUser);
+
+      // Clean up used verification code
+      delete verificationCodes[cleanPhone];
 
       // Add a welcome notification
       if (!db.notifications) db.notifications = [];
@@ -192,7 +333,7 @@ async function startServer() {
         id: `notif_${Date.now()}_welcome`,
         userId: newUser.id,
         title: '🎉 Welcome to Shapla Poribar!',
-        message: 'Your account has been successfully created. Complete your 1st deposit (min $5.00) to receive an instant $1.00 welcome signup bonus in your wallet!',
+        message: 'Your account has been successfully created and verified with NID. Complete your 1st deposit (min $5.00) to receive your $1.00 welcome signup bonus!',
         type: 'SYSTEM',
         badge: 'WELCOME',
         isRead: false,
@@ -201,7 +342,7 @@ async function startServer() {
 
       writeDb(db);
 
-      const { password: _, ...userSafe } = newUser;
+      const { password: _, securityAnswer: __, ...userSafe } = newUser;
       return res.json({ success: true, user: userSafe });
     } catch (err: any) {
       console.error('Register error:', err);
@@ -209,7 +350,7 @@ async function startServer() {
     }
   });
 
-  // 2. LOGIN: Universal login from any device or browser
+  // 4. LOGIN: Universal login from any device or browser
   app.post('/api/auth/login', (req, res) => {
     try {
       const { phone, password } = req.body;
@@ -237,7 +378,7 @@ async function startServer() {
         });
       }
 
-      const { password: _, ...userSafe } = user;
+      const { password: _, securityAnswer: __, ...userSafe } = user;
       return res.json({ success: true, user: userSafe });
     } catch (err: any) {
       console.error('Login error:', err);
@@ -245,12 +386,35 @@ async function startServer() {
     }
   });
 
-  // 3. FORGOT PASSWORD: Reset password with phone verification
-  app.post('/api/auth/forgot-password', (req, res) => {
+  // 5. GET SECURITY QUESTION FOR FORGOT PASSWORD
+  app.post('/api/auth/get-security-question', (req, res) => {
     try {
-      const { phone, newPassword } = req.body;
-      if (!phone || !newPassword) {
-        return res.status(400).json({ error: 'Phone number and new password are required.' });
+      const { phone } = req.body;
+      if (!phone) {
+        return res.status(400).json({ error: 'Phone number is required.' });
+      }
+
+      const cleanPhone = normalizePhone(phone);
+      const db = readDb();
+      const user = db.users.find((u: any) => normalizePhone(u.phone) === cleanPhone);
+
+      if (!user) {
+        return res.status(404).json({ error: 'No account found with this phone number. Please verify.' });
+      }
+
+      const question = user.securityQuestion || "What is your childhood nickname?";
+      return res.json({ success: true, securityQuestion: question });
+    } catch (err: any) {
+      return res.status(500).json({ error: 'Failed to retrieve security question.' });
+    }
+  });
+
+  // 6. RESET PASSWORD WITH SECURITY QUESTION
+  app.post('/api/auth/reset-with-security-question', (req, res) => {
+    try {
+      const { phone, securityAnswer, newPassword } = req.body;
+      if (!phone || !securityAnswer || !newPassword) {
+        return res.status(400).json({ error: 'Phone number, security answer, and new password are required.' });
       }
 
       if (String(newPassword).length < 6) {
@@ -259,19 +423,126 @@ async function startServer() {
 
       const cleanPhone = normalizePhone(phone);
       const db = readDb();
-
       const userIndex = db.users.findIndex((u: any) => normalizePhone(u.phone) === cleanPhone);
+
       if (userIndex === -1) {
         return res.status(404).json({ error: 'No account found with this phone number.' });
+      }
+
+      const user = db.users[userIndex];
+      const storedAnswer = String(user.securityAnswer || '').trim().toLowerCase();
+      const providedAnswer = String(securityAnswer).trim().toLowerCase();
+
+      if (storedAnswer && storedAnswer !== providedAnswer) {
+        return res.status(400).json({ 
+          error: 'Incorrect security answer. If you forgot your answer, click "Forgot Security Question" below to recover using your NID.' 
+        });
       }
 
       db.users[userIndex].password = String(newPassword).trim();
       writeDb(db);
 
-      return res.json({ success: true, message: 'Password has been updated. You can now login.' });
+      return res.json({ success: true, message: 'Password has been updated successfully. You can now log in.' });
     } catch (err: any) {
-      console.error('Forgot password error:', err);
-      return res.status(500).json({ error: 'Internal reset error.' });
+      return res.status(500).json({ error: 'Failed to reset password.' });
+    }
+  });
+
+  // 7. RECOVER SECURITY QUESTION WITH NID AND PHONE NUMBER
+  app.post('/api/auth/recover-security-question', (req, res) => {
+    try {
+      const { phone, nid } = req.body;
+      if (!phone || !nid) {
+        return res.status(400).json({ error: 'Both phone number and registered NID number are required.' });
+      }
+
+      const cleanPhone = normalizePhone(phone);
+      const cleanNid = String(nid).trim();
+
+      const db = readDb();
+      const user = db.users.find((u: any) => normalizePhone(u.phone) === cleanPhone);
+
+      if (!user) {
+        return res.status(404).json({ error: 'No account registered with this phone number.' });
+      }
+
+      if (!user.nid || String(user.nid).trim() !== cleanNid) {
+        return res.status(400).json({ error: 'NID number does not match our records for this account.' });
+      }
+
+      const question = user.securityQuestion || "What is your childhood nickname?";
+      const answer = user.securityAnswer || "shanto";
+
+      // Simulated SMS dispatched to user's phone
+      const smsMessage = `📲 SMS to ${phone}: Security Recovery Notice: Your Security Question is "${question}" and Answer is "${answer}". Please use this to reset your password.`;
+
+      return res.json({
+        success: true,
+        message: 'Security details verified. Your Security Question and Answer have been sent via SMS.',
+        securityQuestion: question,
+        securityAnswer: answer,
+        smsMessage,
+      });
+    } catch (err: any) {
+      return res.status(500).json({ error: 'Recovery failed.' });
+    }
+  });
+
+  // 8. BETS PERSISTENCE: Get, Create, and Settle Bets
+  app.get('/api/bets', (req, res) => {
+    try {
+      const { userId } = req.query;
+      const db = readDb();
+      const bets = (db.bets || []).filter((b: any) => !userId || b.userId === userId);
+      return res.json({ bets });
+    } catch (err) {
+      return res.status(500).json({ error: 'Failed to fetch bets.' });
+    }
+  });
+
+  app.post('/api/bets', (req, res) => {
+    try {
+      const bet = req.body;
+      if (!bet || !bet.id || !bet.userId) {
+        return res.status(400).json({ error: 'Invalid bet object.' });
+      }
+
+      const db = readDb();
+      if (!db.bets) db.bets = [];
+      db.bets.unshift(bet);
+      if (db.bets.length > 500) {
+        db.bets = db.bets.slice(0, 500);
+      }
+      writeDb(db);
+      return res.json({ success: true, bet });
+    } catch (err) {
+      return res.status(500).json({ error: 'Failed to record bet.' });
+    }
+  });
+
+  app.post('/api/bets/resolve', (req, res) => {
+    try {
+      const { roundId, winner, winningPayoutMultiplier } = req.body;
+      const mult = winningPayoutMultiplier || 1.85;
+      const db = readDb();
+      if (db.bets) {
+        db.bets = db.bets.map((b: any) => {
+          if (b.roundId === roundId && b.status === 'PENDING') {
+            if (b.option === winner) {
+              const profit = Number((b.amount * 0.85).toFixed(2));
+              const payout = Number((b.amount + profit).toFixed(2));
+              return { ...b, status: 'WON', payout };
+            } else {
+              return { ...b, status: 'LOST', payout: 0 };
+            }
+          }
+          return b;
+        });
+        writeDb(db);
+      }
+      return res.json({ success: true });
+    } catch (err) {
+      return res.status(500).json({ error: 'Failed to resolve bets.' });
     }
   });
 

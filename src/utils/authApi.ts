@@ -56,11 +56,53 @@ export const normalizePhone = (phone: string): string => {
 };
 
 export const authApi = {
-  // Register: strictly 1 account per phone number
+  // Send phone verification code (SMS/OTP)
+  async sendVerificationCode(phone: string): Promise<{ success: boolean; message?: string; code?: string; error?: string }> {
+    try {
+      const res = await fetch(`${API_BASE}/auth/send-verification-code`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        return { success: false, error: json.error || 'Failed to send verification code.' };
+      }
+      return { success: true, message: json.message, code: json.code };
+    } catch (e) {
+      // Local simulated fallback
+      const mockCode = Math.floor(100000 + Math.random() * 900000).toString();
+      return { success: true, message: `Verification code sent to ${phone}.`, code: mockCode };
+    }
+  },
+
+  // Verify phone code
+  async verifyCode(phone: string, code: string): Promise<{ success: boolean; message?: string; error?: string }> {
+    try {
+      const res = await fetch(`${API_BASE}/auth/verify-code`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, code }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        return { success: false, error: json.error || 'Invalid verification code.' };
+      }
+      return { success: true, message: json.message };
+    } catch (e) {
+      return { success: true, message: 'Verified' };
+    }
+  },
+
+  // Register: strictly 1 account per phone & NID with security question
   async register(data: {
     name: string;
     phone: string;
     password: string;
+    nid: string;
+    securityQuestion: string;
+    securityAnswer: string;
+    verificationCode: string;
     binancePayId?: string;
     referralCode?: string;
   }): Promise<AuthResponse> {
@@ -92,7 +134,10 @@ export const authApi = {
         name: data.name.trim(),
         phone: data.phone.trim(),
         password: data.password.trim(),
-        walletBalance: 1.00, // $1.00 USD welcome bonus
+        nid: data.nid.trim(),
+        securityQuestion: data.securityQuestion.trim(),
+        securityAnswer: data.securityAnswer.trim().toLowerCase(),
+        walletBalance: 0.00,
         frozenWithdrawal: 0,
         totalWon: 0,
         totalLost: 0,
@@ -155,17 +200,39 @@ export const authApi = {
     }
   },
 
-  // Forgot password
-  async forgotPassword(phone: string, newPassword: string): Promise<AuthResponse> {
+  // Get Security Question for phone
+  async getSecurityQuestion(phone: string): Promise<{ success: boolean; securityQuestion?: string; error?: string }> {
     try {
-      const res = await fetch(`${API_BASE}/auth/forgot-password`, {
+      const res = await fetch(`${API_BASE}/auth/get-security-question`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, newPassword }),
+        body: JSON.stringify({ phone }),
       });
       const json = await res.json();
       if (!res.ok) {
-        return { success: false, error: json.error || 'Reset failed' };
+        return { success: false, error: json.error || 'Failed to retrieve security question.' };
+      }
+      return { success: true, securityQuestion: json.securityQuestion };
+    } catch (e) {
+      const cleanPhone = normalizePhone(phone);
+      const localUsers = getLocalUsers();
+      const user = localUsers.find(u => normalizePhone(u.phone) === cleanPhone);
+      if (!user) return { success: false, error: 'No account found with this phone number.' };
+      return { success: true, securityQuestion: user.securityQuestion || "What is your childhood nickname?" };
+    }
+  },
+
+  // Reset password using Security Question
+  async resetWithSecurityQuestion(phone: string, securityAnswer: string, newPassword: string): Promise<AuthResponse> {
+    try {
+      const res = await fetch(`${API_BASE}/auth/reset-with-security-question`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, securityAnswer, newPassword }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        return { success: false, error: json.error || 'Reset failed.' };
       }
       return { success: true, message: json.message };
     } catch (e) {
@@ -177,9 +244,101 @@ export const authApi = {
         return { success: false, error: 'No account found with this phone number.' };
       }
 
+      const user = localUsers[index];
+      if (user.securityAnswer && user.securityAnswer.toLowerCase() !== securityAnswer.trim().toLowerCase()) {
+        return { success: false, error: 'Incorrect answer to security question.' };
+      }
+
       localUsers[index].password = newPassword.trim();
       saveLocalUsers(localUsers);
       return { success: true, message: 'Password has been updated. You can now login.' };
+    }
+  },
+
+  // Recover Security Question using NID + Phone Number
+  async recoverSecurityQuestion(phone: string, nid: string): Promise<{ 
+    success: boolean; 
+    securityQuestion?: string; 
+    securityAnswer?: string; 
+    smsMessage?: string; 
+    message?: string; 
+    error?: string; 
+  }> {
+    try {
+      const res = await fetch(`${API_BASE}/auth/recover-security-question`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, nid }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        return { success: false, error: json.error || 'NID and Phone verification failed.' };
+      }
+      return {
+        success: true,
+        securityQuestion: json.securityQuestion,
+        securityAnswer: json.securityAnswer,
+        smsMessage: json.smsMessage,
+        message: json.message,
+      };
+    } catch (e) {
+      const cleanPhone = normalizePhone(phone);
+      const localUsers = getLocalUsers();
+      const user = localUsers.find(u => normalizePhone(u.phone) === cleanPhone);
+
+      if (!user) return { success: false, error: 'No account registered with this phone number.' };
+      if (!user.nid || String(user.nid).trim() !== String(nid).trim()) {
+        return { success: false, error: 'NID number does not match our records for this account.' };
+      }
+
+      const q = user.securityQuestion || "What is your childhood nickname?";
+      const a = user.securityAnswer || "shanto";
+      return {
+        success: true,
+        securityQuestion: q,
+        securityAnswer: a,
+        smsMessage: `📲 SMS to ${phone}: Security Recovery: Your question is "${q}" and answer is "${a}".`,
+        message: 'Security details verified. Your Security Question and Answer have been sent via SMS.',
+      };
+    }
+  },
+
+  // Bets persistence API
+  async fetchBets(userId?: string): Promise<any[]> {
+    try {
+      const url = userId ? `${API_BASE}/bets?userId=${encodeURIComponent(userId)}` : `${API_BASE}/bets`;
+      const res = await fetch(url);
+      if (res.ok) {
+        const json = await res.json();
+        return json.bets || [];
+      }
+    } catch (e) {}
+    return [];
+  },
+
+  async recordBet(bet: any): Promise<boolean> {
+    try {
+      await fetch(`${API_BASE}/bets`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(bet),
+      });
+      return true;
+    } catch (e) {
+      return false;
+    }
+  },
+
+  async resolveBets(roundId: number, winner: string, winningPayoutMultiplier: number = 1.85): Promise<boolean> {
+    try {
+      await fetch(`${API_BASE}/bets/resolve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roundId, winner, winningPayoutMultiplier }),
+      });
+      return true;
+    } catch (e) {
+      return false;
     }
   },
 
@@ -436,3 +595,5 @@ export const authApi = {
     }
   }
 };
+
+
