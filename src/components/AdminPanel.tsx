@@ -4,7 +4,8 @@ import {
   DepositRequest, 
   Round, 
   UserProfile, 
-  WithdrawalRequest 
+  WithdrawalRequest,
+  Bet
 } from '../types/game';
 import { 
   CheckCircle2, 
@@ -53,6 +54,7 @@ interface AdminPanelProps {
   onToggleSuspendUser?: (userId: string, isSuspended: boolean, reason?: string) => void;
   onPublishNotice?: (title: string, message: string, badge?: string) => Promise<boolean | void>;
   onCloseAdmin: () => void;
+  allBets?: Bet[];
 }
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({
@@ -70,6 +72,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   onToggleSuspendUser,
   onPublishNotice,
   onCloseAdmin,
+  allBets = [],
 }) => {
   const [activeTab, setActiveTab] = useState<'DEPOSITS' | 'WITHDRAWALS' | 'NOTICES' | 'SETTINGS' | 'USERS'>('DEPOSITS');
   const [editableSettings, setEditableSettings] = useState<AdminSettings>(settings);
@@ -143,37 +146,42 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     count: approvedWithdrawals.length,
   };
 
-  // Platform Net Profit Calculations across settled rounds:
+  // Platform Net Profit Calculations across settled REAL bets (100% Genuine Original Ledger):
   let totalHouseProfit = 0;
   let todayHouseProfit = 0;
   let weekHouseProfit = 0;
   let monthHouseProfit = 0;
   let yearHouseProfit = 0;
 
-  roundsHistory.forEach((r) => {
-    if (r.settled && r.winner) {
-      const winningPool = r.winner === 'SHAPLA' ? r.shaplaTotal : r.poribarTotal;
-      const losingPool = r.winner === 'SHAPLA' ? r.poribarTotal : r.shaplaTotal;
-      const winnerProfitPaid = Number((winningPool * 0.85).toFixed(2));
-      const feeCollected = Number((winningPool * 0.15).toFixed(2));
-      const roundNet = losingPool - winnerProfitPaid + feeCollected;
-      const roundTime = r.endTime || r.startTime;
-
-      totalHouseProfit += roundNet;
-      if (roundTime >= startOfToday) todayHouseProfit += roundNet;
-      if (roundTime >= startOfWeek) weekHouseProfit += roundNet;
-      if (roundTime >= startOfMonth) monthHouseProfit += roundNet;
-      if (roundTime >= startOfYear) yearHouseProfit += roundNet;
+  (allBets || []).forEach((b) => {
+    const betTime = b.timestamp || 0;
+    if (b.status === 'WON') {
+      const profitPaid = (b.payout && b.payout > b.amount) ? (b.payout - b.amount) : Number((b.amount * 0.85).toFixed(2));
+      totalHouseProfit -= profitPaid;
+      if (betTime >= startOfToday) todayHouseProfit -= profitPaid;
+      if (betTime >= startOfWeek) weekHouseProfit -= profitPaid;
+      if (betTime >= startOfMonth) monthHouseProfit -= profitPaid;
+      if (betTime >= startOfYear) yearHouseProfit -= profitPaid;
+    } else if (b.status === 'LOST') {
+      totalHouseProfit += b.amount;
+      if (betTime >= startOfToday) todayHouseProfit += b.amount;
+      if (betTime >= startOfWeek) weekHouseProfit += b.amount;
+      if (betTime >= startOfMonth) monthHouseProfit += b.amount;
+      if (betTime >= startOfYear) yearHouseProfit += b.amount;
     }
   });
 
-  // Super Admin 100% Original Genuine Platform Profit Breakdown (No artificial floor)
+  // Net Cash Balance Flow (Approved Deposits - Approved Withdrawals)
+  const netCashMargin = realTotalDeposit - realTotalPayout;
+
+  // Super Admin 100% Original Genuine Platform Profit Breakdown
   const profitStats = {
     total: totalHouseProfit,
     today: todayHouseProfit,
     thisWeek: weekHouseProfit,
     thisMonth: monthHouseProfit,
     thisYear: yearHouseProfit,
+    netCashMargin,
   };
 
   const handleSaveSettings = (e: React.FormEvent) => {

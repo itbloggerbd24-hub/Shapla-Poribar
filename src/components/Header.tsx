@@ -20,7 +20,8 @@ import {
   ChevronDown,
   TrendingUp,
   DollarSign,
-  Trophy
+  Trophy,
+  CreditCard
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -28,6 +29,7 @@ interface HeaderProps {
   onOpenDeposit: () => void;
   onOpenWithdraw: () => void;
   onOpenRules: () => void;
+  onOpenWalletHistory?: () => void;
   onOpenReferral?: () => void;
   onOpenRewards?: () => void;
   onOpenNotifications?: () => void;
@@ -48,6 +50,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenDeposit,
   onOpenWithdraw,
   onOpenRules,
+  onOpenWalletHistory,
   onOpenReferral,
   onOpenRewards,
   onOpenNotifications,
@@ -186,59 +189,21 @@ export const Header: React.FC<HeaderProps> = ({
                       </div>
                     </button>
 
-                    {onOpenProfile && (
+                    {onOpenWalletHistory && (
                       <button
                         type="button"
                         onClick={() => {
                           setIsBalanceMenuOpen(false);
-                          onOpenProfile();
+                          onOpenWalletHistory();
                         }}
-                        className="w-full p-2.5 rounded-xl hover:bg-slate-800 text-left flex items-center gap-2.5 transition cursor-pointer group text-xs font-bold text-slate-300 hover:text-white mt-1 border-t border-slate-800/80 pt-2"
+                        className="w-full p-2.5 rounded-xl hover:bg-slate-800 text-left flex items-center gap-2.5 transition cursor-pointer group text-xs font-bold text-amber-300 hover:text-white mt-1 border-t border-slate-800/80 pt-2"
                       >
                         <div className="w-8 h-8 rounded-lg bg-amber-400/20 flex items-center justify-center shrink-0">
-                          <User className="w-4 h-4 text-amber-400" />
+                          <CreditCard className="w-4 h-4 text-amber-400" />
                         </div>
                         <div>
-                          <div className="text-white text-xs font-bold leading-tight">My Profile Details</div>
-                          <div className="text-[10px] text-slate-400 font-normal">View identity & records</div>
-                        </div>
-                      </button>
-                    )}
-
-                    {onOpenDepositAnalytics && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsBalanceMenuOpen(false);
-                          onOpenDepositAnalytics();
-                        }}
-                        className="w-full p-2.5 rounded-xl hover:bg-emerald-500/10 text-left flex items-center gap-2.5 transition cursor-pointer group text-xs font-bold text-emerald-400 hover:text-emerald-300 mt-1"
-                      >
-                        <div className="w-8 h-8 rounded-lg bg-emerald-500/20 flex items-center justify-center shrink-0">
-                          <TrendingUp className="w-4 h-4 text-emerald-400" />
-                        </div>
-                        <div>
-                          <div className="text-white text-xs font-bold leading-tight">Deposit Analytics</div>
-                          <div className="text-[10px] text-slate-400 font-normal">View verified platform volume</div>
-                        </div>
-                      </button>
-                    )}
-
-                    {onOpenPayoutAnalytics && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsBalanceMenuOpen(false);
-                          onOpenPayoutAnalytics();
-                        }}
-                        className="w-full p-2.5 rounded-xl hover:bg-amber-500/10 text-left flex items-center gap-2.5 transition cursor-pointer group text-xs font-bold text-amber-400 hover:text-amber-300 mt-1"
-                      >
-                        <div className="w-8 h-8 rounded-lg bg-amber-500/20 flex items-center justify-center shrink-0">
-                          <DollarSign className="w-4 h-4 text-amber-400" />
-                        </div>
-                        <div>
-                          <div className="text-white text-xs font-bold leading-tight">Payout Analytics</div>
-                          <div className="text-[10px] text-slate-400 font-normal">View live cashout proof</div>
+                          <div className="text-white text-xs font-bold leading-tight">Wallet History</div>
+                          <div className="text-[10px] text-slate-400 font-normal">View deposits & cashouts</div>
                         </div>
                       </button>
                     )}
@@ -441,6 +406,22 @@ export const Header: React.FC<HeaderProps> = ({
                     10 AM – 10 PM
                   </span>
                 </button>
+
+                {onOpenWalletHistory && (
+                  <button
+                    onClick={() => {
+                      setIsMobileMenuOpen(false);
+                      onOpenWalletHistory();
+                    }}
+                    className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl bg-slate-800/60 hover:bg-slate-800 text-slate-200 hover:text-white border border-slate-700/60 transition cursor-pointer"
+                  >
+                    <div className="flex items-center gap-3">
+                      <CreditCard className="w-4 h-4 text-amber-400" />
+                      <span className="font-bold">Wallet History</span>
+                    </div>
+                    <span className="text-[10px] font-mono text-slate-400">Records</span>
+                  </button>
+                )}
 
                 {/* 4 Requested Navigation Options: Deposit Analytics, Payout Analytics, Leaderboard, My Bets */}
                 <div className="pt-2 pb-1 space-y-1.5 border-t border-b border-slate-800/80 my-2">

@@ -1,15 +1,21 @@
 import React, { useState } from 'react';
-import { Bet, DepositRequest, WithdrawalRequest, RankedPlayer } from '../types/game';
-import { Trophy, User, CheckCircle2, XCircle, Clock } from 'lucide-react';
+import { Bet, RankedPlayer } from '../types/game';
+import { Trophy, User, CheckCircle2, XCircle, Clock, TrendingUp, DollarSign } from 'lucide-react';
 import { Leaderboard } from './Leaderboard';
+import { DepositAnalyticsContent } from './DepositAnalyticsModal';
+import { PayoutAnalyticsContent } from './PayoutAnalyticsModal';
+
+export type HistoryTabType = 'MY_BETS' | 'LEADERBOARD' | 'DEPOSIT_ANALYTICS' | 'PAYOUT_ANALYTICS';
 
 interface HistoryTabsProps {
   rankings: RankedPlayer[];
   userBets: Bet[];
-  userDeposits?: DepositRequest[];
-  userWithdrawals?: WithdrawalRequest[];
-  selectedTab?: 'LEADERBOARD' | 'MY_BETS';
-  onSelectTab?: (tab: 'LEADERBOARD' | 'MY_BETS') => void;
+  selectedTab?: HistoryTabType;
+  onSelectTab?: (tab: HistoryTabType) => void;
+  realTotalDeposit?: number;
+  realTotalPayout?: number;
+  onOpenDeposit?: () => void;
+  onOpenWithdraw?: () => void;
 }
 
 export const HistoryTabs: React.FC<HistoryTabsProps> = ({
@@ -17,11 +23,16 @@ export const HistoryTabs: React.FC<HistoryTabsProps> = ({
   userBets,
   selectedTab,
   onSelectTab,
+  realTotalDeposit = 0,
+  realTotalPayout = 0,
+  onOpenDeposit,
+  onOpenWithdraw,
 }) => {
-  const [internalTab, setInternalTab] = useState<'LEADERBOARD' | 'MY_BETS'>('LEADERBOARD');
+  // "my bets thakbe prothome jeta sob somoy select thakbe normally"
+  const [internalTab, setInternalTab] = useState<HistoryTabType>('MY_BETS');
   const activeTab = selectedTab !== undefined ? selectedTab : internalTab;
 
-  const handleTabClick = (tab: 'LEADERBOARD' | 'MY_BETS') => {
+  const handleTabClick = (tab: HistoryTabType) => {
     if (onSelectTab) {
       onSelectTab(tab);
     } else {
@@ -32,39 +43,64 @@ export const HistoryTabs: React.FC<HistoryTabsProps> = ({
   return (
     <div id="history-tabs-section" className="bg-slate-900/80 border border-slate-800 rounded-3xl p-4 sm:p-6 shadow-xl scroll-mt-20">
       
-      {/* Navigation Tabs: 2-column grid for Leaderboard and My Bets (Wallet History removed as requested) */}
-      <div className="grid grid-cols-2 gap-2 pb-2 mb-4 sm:mb-6 border-b border-slate-800">
-        <button
-          onClick={() => handleTabClick('LEADERBOARD')}
-          className={`py-2.5 px-3 sm:py-3 sm:px-4 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition cursor-pointer text-center ${
-            activeTab === 'LEADERBOARD'
-              ? 'bg-amber-500 text-slate-950 font-black shadow-md'
-              : 'text-slate-400 hover:text-white hover:bg-slate-800'
-          }`}
-        >
-          <Trophy className="w-4 h-4 shrink-0" />
-          <span className="truncate">Leaderboard</span>
-        </button>
-
+      {/* 4 Navigation Tabs: 1. My Bets (first & default), 2. Leaderboard, 3. Deposit Analytics, 4. Payout Analytics */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 sm:gap-2 pb-2 mb-4 sm:mb-6 border-b border-slate-800">
+        
+        {/* Tab 1: My Bets (first by default) */}
         <button
           onClick={() => handleTabClick('MY_BETS')}
-          className={`py-2.5 px-3 sm:py-3 sm:px-4 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition cursor-pointer text-center ${
+          className={`py-2 px-2 sm:py-2.5 sm:px-3 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 sm:gap-2 transition cursor-pointer text-center ${
             activeTab === 'MY_BETS'
               ? 'bg-amber-500 text-slate-950 font-black shadow-md'
               : 'text-slate-400 hover:text-white hover:bg-slate-800'
           }`}
         >
-          <User className="w-4 h-4 shrink-0" />
+          <User className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
           <span className="truncate">My Bets ({userBets.length})</span>
         </button>
+
+        {/* Tab 2: Leaderboard */}
+        <button
+          onClick={() => handleTabClick('LEADERBOARD')}
+          className={`py-2 px-2 sm:py-2.5 sm:px-3 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 sm:gap-2 transition cursor-pointer text-center ${
+            activeTab === 'LEADERBOARD'
+              ? 'bg-amber-500 text-slate-950 font-black shadow-md'
+              : 'text-slate-400 hover:text-white hover:bg-slate-800'
+          }`}
+        >
+          <Trophy className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+          <span className="truncate">Leaderboard</span>
+        </button>
+
+        {/* Tab 3: Deposit Analytics */}
+        <button
+          onClick={() => handleTabClick('DEPOSIT_ANALYTICS')}
+          className={`py-2 px-2 sm:py-2.5 sm:px-3 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 sm:gap-2 transition cursor-pointer text-center ${
+            activeTab === 'DEPOSIT_ANALYTICS'
+              ? 'bg-emerald-500 text-slate-950 font-black shadow-md'
+              : 'text-slate-400 hover:text-emerald-300 hover:bg-slate-800'
+          }`}
+        >
+          <TrendingUp className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+          <span className="truncate">Deposit Analytics</span>
+        </button>
+
+        {/* Tab 4: Payout Analytics */}
+        <button
+          onClick={() => handleTabClick('PAYOUT_ANALYTICS')}
+          className={`py-2 px-2 sm:py-2.5 sm:px-3 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 sm:gap-2 transition cursor-pointer text-center ${
+            activeTab === 'PAYOUT_ANALYTICS'
+              ? 'bg-amber-500 text-slate-950 font-black shadow-md'
+              : 'text-slate-400 hover:text-amber-300 hover:bg-slate-800'
+          }`}
+        >
+          <DollarSign className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+          <span className="truncate">Payout Analytics</span>
+        </button>
+
       </div>
 
-      {/* Tab 1: Leaderboard with Daily, Weekly, Monthly, and Total Earnings in USD */}
-      {activeTab === 'LEADERBOARD' && (
-        <Leaderboard rankings={rankings} />
-      )}
-
-      {/* Tab 2: My Bets History in USD */}
+      {/* Tab 1: My Bets History in USD (Normally selected by default) */}
       {activeTab === 'MY_BETS' && (
         <div className="space-y-3">
           {userBets.length === 0 ? (
@@ -124,6 +160,27 @@ export const HistoryTabs: React.FC<HistoryTabsProps> = ({
             </div>
           )}
         </div>
+      )}
+
+      {/* Tab 2: Leaderboard with Daily, Weekly, Monthly, and Total Earnings in USD */}
+      {activeTab === 'LEADERBOARD' && (
+        <Leaderboard rankings={rankings} />
+      )}
+
+      {/* Tab 3: Deposit Analytics */}
+      {activeTab === 'DEPOSIT_ANALYTICS' && (
+        <DepositAnalyticsContent
+          realTotalDeposit={realTotalDeposit}
+          onOpenDeposit={onOpenDeposit}
+        />
+      )}
+
+      {/* Tab 4: Payout Analytics */}
+      {activeTab === 'PAYOUT_ANALYTICS' && (
+        <PayoutAnalyticsContent
+          realTotalPayout={realTotalPayout}
+          onOpenWithdraw={onOpenWithdraw}
+        />
       )}
 
     </div>

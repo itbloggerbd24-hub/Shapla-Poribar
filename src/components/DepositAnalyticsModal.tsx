@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { 
   ArrowLeft, 
   ArrowDownCircle, 
@@ -9,7 +9,6 @@ import {
   Activity, 
   Calendar, 
   Sparkles, 
-  ExternalLink,
   Wallet
 } from 'lucide-react';
 
@@ -45,16 +44,13 @@ const INITIAL_RECENT_DEPOSITS: SimulatedDeposit[] = [
   { id: 'DEP-8910', userMasked: '0184***765', amountUSD: 85.00, network: 'USDT (TRC-20)', txRef: 'TKu91...32ee', minutesAgo: 42, status: 'CONFIRMED' }
 ];
 
-export const DepositAnalyticsModal: React.FC<DepositAnalyticsModalProps> = ({
-  isOpen,
-  onClose,
-  onOpenDeposit,
-  realTotalDeposit = 0,
-}) => {
+export const DepositAnalyticsContent: React.FC<{
+  realTotalDeposit?: number;
+  onOpenDeposit?: () => void;
+}> = ({ realTotalDeposit = 0, onOpenDeposit }) => {
   const [depositsList] = useState<SimulatedDeposit[]>(INITIAL_RECENT_DEPOSITS);
 
   // Scaled social-proof statistics ("koyek gun bariye dekhabe")
-  // Base boosted anchor + multiple of any real activity
   const boostedBase = 286450.00;
   const boostedTotal = boostedBase + (realTotalDeposit * 6.5);
   const boostedToday = 14280.00 + (realTotalDeposit * 1.8);
@@ -62,47 +58,8 @@ export const DepositAnalyticsModal: React.FC<DepositAnalyticsModalProps> = ({
   const boostedMonth = 184300.00 + (realTotalDeposit * 4.5);
   const boostedYear = boostedTotal;
 
-  if (!isOpen) return null;
-
   return (
-    <div className="relative w-full max-w-5xl mx-auto bg-slate-900 border border-slate-800 rounded-3xl p-4 sm:p-7 shadow-2xl space-y-6">
-      
-      {/* Top Header with Back symbol in top-right corner */}
-      <div className="flex items-start justify-between gap-4 pb-4 border-b border-slate-800">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <div className="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
-              <TrendingUp className="w-5 h-5" />
-            </div>
-            <div>
-              <h2 className="text-lg sm:text-xl font-black text-white">
-                Deposit Analytics & Transparency
-              </h2>
-              <div className="flex items-center gap-2 mt-0.5">
-                <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  Live Sync Active
-                </span>
-                <span className="text-[10px] text-slate-400">
-                  Binance Direct & USDT Settlement
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Back symbol in the corner */}
-        <button
-          onClick={onClose}
-          className="p-2 sm:px-3 sm:py-2 rounded-2xl bg-slate-800/80 hover:bg-slate-700 border border-slate-700/80 text-slate-300 hover:text-white transition cursor-pointer flex items-center gap-1.5 shrink-0"
-          aria-label="Back to Arena"
-          title="Back to Arena"
-        >
-          <ArrowLeft className="w-5 h-5 text-amber-400" />
-          <span className="text-xs font-bold hidden sm:inline">Back</span>
-        </button>
-      </div>
-
+    <div className="space-y-5">
       {/* Main Multi-Period Analytics Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 sm:gap-3">
         {/* Total Deposits */}
@@ -256,24 +213,79 @@ export const DepositAnalyticsModal: React.FC<DepositAnalyticsModalProps> = ({
       </div>
 
       {/* Action Footer */}
-      <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-slate-800">
-        <div className="text-xs text-slate-400 text-center sm:text-left">
-          Ready to join? Deposits start from <strong className="text-white">$5.00 USD</strong>.
-        </div>
+      {onOpenDeposit && (
+        <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-slate-800">
+          <div className="text-xs text-slate-400 text-center sm:text-left">
+            Ready to join? Deposits start from <strong className="text-white">$5.00 USD</strong>.
+          </div>
 
-        {onOpenDeposit && (
           <button
-            onClick={() => {
-              onClose();
-              onOpenDeposit();
-            }}
+            onClick={onOpenDeposit}
             className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white font-black text-xs transition cursor-pointer flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/40"
           >
             <ArrowDownCircle className="w-4 h-4" />
             <span>Deposit via Binance Now</span>
           </button>
-        )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+export const DepositAnalyticsModal: React.FC<DepositAnalyticsModalProps> = ({
+  isOpen,
+  onClose,
+  onOpenDeposit,
+  realTotalDeposit = 0,
+}) => {
+  if (!isOpen) return null;
+
+  return (
+    <div className="relative w-full max-w-5xl mx-auto bg-slate-900 border border-slate-800 rounded-3xl p-4 sm:p-7 shadow-2xl space-y-6">
+      
+      {/* Top Header with Back symbol in top-right corner */}
+      <div className="flex items-start justify-between gap-4 pb-4 border-b border-slate-800">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <div className="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+              <TrendingUp className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-lg sm:text-xl font-black text-white">
+                Deposit Analytics & Transparency
+              </h2>
+              <div className="flex items-center gap-2 mt-0.5">
+                <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  Live Sync Active
+                </span>
+                <span className="text-[10px] text-slate-400">
+                  Binance Direct & USDT Settlement
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Back symbol in the corner */}
+        <button
+          onClick={onClose}
+          className="p-2 sm:px-3 sm:py-2 rounded-2xl bg-slate-800/80 hover:bg-slate-700 border border-slate-700/80 text-slate-300 hover:text-white transition cursor-pointer flex items-center gap-1.5 shrink-0"
+          aria-label="Back to Arena"
+          title="Back to Arena"
+        >
+          <ArrowLeft className="w-5 h-5 text-amber-400" />
+          <span className="text-xs font-bold hidden sm:inline">Back</span>
+        </button>
       </div>
+
+      <DepositAnalyticsContent 
+        realTotalDeposit={realTotalDeposit} 
+        onOpenDeposit={() => {
+          onClose();
+          onOpenDeposit?.();
+        }} 
+      />
 
     </div>
   );
