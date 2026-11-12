@@ -37,6 +37,9 @@ import { AuthPage } from './components/AuthPage';
 import { ReferralModal } from './components/ReferralModal';
 import { DailyRewardsModal } from './components/DailyRewardsModal';
 import { NotificationModal } from './components/NotificationModal';
+import { ProfileModal } from './components/ProfileModal';
+import { DepositAnalyticsModal } from './components/DepositAnalyticsModal';
+import { PayoutAnalyticsModal } from './components/PayoutAnalyticsModal';
 import { authApi } from './utils/authApi';
 import { checkWithdrawalHours } from './utils/withdrawalHours';
 import { 
@@ -103,6 +106,10 @@ export default function App() {
   const [isReferralOpen, setIsReferralOpen] = useState<boolean>(false);
   const [isRewardsOpen, setIsRewardsOpen] = useState<boolean>(false);
   const [isNotificationOpen, setIsNotificationOpen] = useState<boolean>(false);
+  const [isProfileOpen, setIsProfileOpen] = useState<boolean>(false);
+  const [isDepositAnalyticsOpen, setIsDepositAnalyticsOpen] = useState<boolean>(false);
+  const [isPayoutAnalyticsOpen, setIsPayoutAnalyticsOpen] = useState<boolean>(false);
+  const [activeHistoryTab, setActiveHistoryTab] = useState<'LEADERBOARD' | 'MY_BETS'>('LEADERBOARD');
   const [notifications, setNotifications] = useState<AppNotification[]>(() => 
     loadFromStorage('notifications_data_usd', [])
   );
@@ -975,6 +982,7 @@ export default function App() {
           setIsRulesOpen(false);
           setIsReferralOpen(false);
           setIsRewardsOpen(false);
+          setIsProfileOpen(false);
           setIsDepositOpen(true);
         }}
         onOpenWithdraw={() => {
@@ -983,6 +991,7 @@ export default function App() {
           setIsRulesOpen(false);
           setIsReferralOpen(false);
           setIsRewardsOpen(false);
+          setIsProfileOpen(false);
           setIsWithdrawOpen(true);
         }}
         onOpenRules={() => {
@@ -991,6 +1000,7 @@ export default function App() {
           setIsNotificationOpen(false);
           setIsReferralOpen(false);
           setIsRewardsOpen(false);
+          setIsProfileOpen(false);
           setIsRulesOpen(true);
         }}
         onOpenReferral={() => {
@@ -999,6 +1009,7 @@ export default function App() {
           setIsNotificationOpen(false);
           setIsRulesOpen(false);
           setIsRewardsOpen(false);
+          setIsProfileOpen(false);
           setIsReferralOpen(true);
         }}
         onOpenRewards={() => {
@@ -1007,6 +1018,7 @@ export default function App() {
           setIsNotificationOpen(false);
           setIsRulesOpen(false);
           setIsReferralOpen(false);
+          setIsProfileOpen(false);
           setIsRewardsOpen(true);
         }}
         onOpenNotifications={() => {
@@ -1015,12 +1027,78 @@ export default function App() {
           setIsRulesOpen(false);
           setIsReferralOpen(false);
           setIsRewardsOpen(false);
+          setIsProfileOpen(false);
           setIsNotificationOpen(true);
           setNotifications((prev) => {
             const updated = prev.map((n) => ({ ...n, isRead: true }));
             saveToStorage('notifications_data_usd', updated);
             return updated;
           });
+        }}
+        onOpenProfile={() => {
+          setIsDepositOpen(false);
+          setIsWithdrawOpen(false);
+          setIsRulesOpen(false);
+          setIsReferralOpen(false);
+          setIsRewardsOpen(false);
+          setIsNotificationOpen(false);
+          setIsDepositAnalyticsOpen(false);
+          setIsPayoutAnalyticsOpen(false);
+          setIsProfileOpen(true);
+        }}
+        onOpenDepositAnalytics={() => {
+          setIsDepositOpen(false);
+          setIsWithdrawOpen(false);
+          setIsRulesOpen(false);
+          setIsReferralOpen(false);
+          setIsRewardsOpen(false);
+          setIsNotificationOpen(false);
+          setIsProfileOpen(false);
+          setIsPayoutAnalyticsOpen(false);
+          setIsDepositAnalyticsOpen(true);
+        }}
+        onOpenPayoutAnalytics={() => {
+          setIsDepositOpen(false);
+          setIsWithdrawOpen(false);
+          setIsRulesOpen(false);
+          setIsReferralOpen(false);
+          setIsRewardsOpen(false);
+          setIsNotificationOpen(false);
+          setIsProfileOpen(false);
+          setIsDepositAnalyticsOpen(false);
+          setIsPayoutAnalyticsOpen(true);
+        }}
+        onOpenLeaderboard={() => {
+          setIsDepositOpen(false);
+          setIsWithdrawOpen(false);
+          setIsNotificationOpen(false);
+          setIsRulesOpen(false);
+          setIsReferralOpen(false);
+          setIsRewardsOpen(false);
+          setIsProfileOpen(false);
+          setIsDepositAnalyticsOpen(false);
+          setIsPayoutAnalyticsOpen(false);
+          setActiveHistoryTab('LEADERBOARD');
+          setTimeout(() => {
+            const el = document.getElementById('history-tabs-section');
+            if (el) el.scrollIntoView({ behavior: 'smooth' });
+          }, 80);
+        }}
+        onOpenMyBets={() => {
+          setIsDepositOpen(false);
+          setIsWithdrawOpen(false);
+          setIsNotificationOpen(false);
+          setIsRulesOpen(false);
+          setIsReferralOpen(false);
+          setIsRewardsOpen(false);
+          setIsProfileOpen(false);
+          setIsDepositAnalyticsOpen(false);
+          setIsPayoutAnalyticsOpen(false);
+          setActiveHistoryTab('MY_BETS');
+          setTimeout(() => {
+            const el = document.getElementById('history-tabs-section');
+            if (el) el.scrollIntoView({ behavior: 'smooth' });
+          }, 80);
         }}
         unreadNoticeCount={notifications.filter((n) => !n.isRead).length}
         isMuted={isMuted}
@@ -1032,6 +1110,9 @@ export default function App() {
           setIsRulesOpen(false);
           setIsReferralOpen(false);
           setIsRewardsOpen(false);
+          setIsProfileOpen(false);
+          setIsDepositAnalyticsOpen(false);
+          setIsPayoutAnalyticsOpen(false);
           handleLogoClick();
         }}
         onLogout={handleLogout}
@@ -1141,6 +1222,47 @@ export default function App() {
             onClaimWeekly={handleClaimWeekly}
             onClaimMonthly={handleClaimMonthly}
           />
+        ) : isProfileOpen ? (
+          /* Dedicated Full Page Profile Details View */
+          <ProfileModal
+            isOpen={true}
+            onClose={() => setIsProfileOpen(false)}
+            user={user}
+            onOpenDeposit={() => {
+              setIsProfileOpen(false);
+              setIsDepositOpen(true);
+            }}
+            onOpenWithdraw={() => {
+              setIsProfileOpen(false);
+              setIsWithdrawOpen(true);
+            }}
+            onOpenReferral={() => {
+              setIsProfileOpen(false);
+              setIsReferralOpen(true);
+            }}
+          />
+        ) : isDepositAnalyticsOpen ? (
+          /* Dedicated Full Page Deposit Analytics View */
+          <DepositAnalyticsModal
+            isOpen={true}
+            onClose={() => setIsDepositAnalyticsOpen(false)}
+            onOpenDeposit={() => {
+              setIsDepositAnalyticsOpen(false);
+              setIsDepositOpen(true);
+            }}
+            realTotalDeposit={deposits.filter((d) => d.status === 'APPROVED').reduce((sum, d) => sum + d.amountUSD, 0)}
+          />
+        ) : isPayoutAnalyticsOpen ? (
+          /* Dedicated Full Page Payout Analytics View */
+          <PayoutAnalyticsModal
+            isOpen={true}
+            onClose={() => setIsPayoutAnalyticsOpen(false)}
+            onOpenWithdraw={() => {
+              setIsPayoutAnalyticsOpen(false);
+              setIsWithdrawOpen(true);
+            }}
+            realTotalPayout={withdrawals.filter((w) => w.status === 'APPROVED').reduce((sum, w) => sum + w.amountUSD, 0)}
+          />
         ) : (
           /* Public Website View */
           <div className="space-y-3 sm:space-y-5">
@@ -1159,16 +1281,19 @@ export default function App() {
                 setIsRulesOpen(false);
                 setIsReferralOpen(false);
                 setIsRewardsOpen(false);
+                setIsProfileOpen(false);
+                setIsDepositAnalyticsOpen(false);
+                setIsPayoutAnalyticsOpen(false);
                 setIsDepositOpen(true);
               }}
             />
 
-            {/* Leaderboard and Earnings Rankings + Personal Bets & Wallet tabs in USD */}
+            {/* Leaderboard and Personal Bets (Wallet History removed) */}
             <HistoryTabs
               rankings={rankings}
               userBets={allBets.filter((b) => b.userId === user.id)}
-              userDeposits={deposits.filter((d) => d.userId === user.id)}
-              userWithdrawals={withdrawals.filter((w) => w.userId === user.id)}
+              selectedTab={activeHistoryTab}
+              onSelectTab={setActiveHistoryTab}
             />
 
           </div>

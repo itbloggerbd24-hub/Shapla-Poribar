@@ -109,13 +109,38 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     .filter((d) => (d.updatedAt || d.createdAt) >= startOfYear)
     .reduce((sum, d) => sum + d.amountUSD, 0);
 
-  // Super Admin Deposit Totals Breakdown
+  const approvedWithdrawals = withdrawals.filter((w) => w.status === 'APPROVED');
+  const realTotalPayout = approvedWithdrawals.reduce((sum, w) => sum + w.amountUSD, 0);
+  const realTodayPayout = approvedWithdrawals
+    .filter((w) => (w.updatedAt || w.createdAt) >= startOfToday)
+    .reduce((sum, w) => sum + w.amountUSD, 0);
+  const realWeekPayout = approvedWithdrawals
+    .filter((w) => (w.updatedAt || w.createdAt) >= startOfWeek)
+    .reduce((sum, w) => sum + w.amountUSD, 0);
+  const realMonthPayout = approvedWithdrawals
+    .filter((w) => (w.updatedAt || w.createdAt) >= startOfMonth)
+    .reduce((sum, w) => sum + w.amountUSD, 0);
+  const realYearPayout = approvedWithdrawals
+    .filter((w) => (w.updatedAt || w.createdAt) >= startOfYear)
+    .reduce((sum, w) => sum + w.amountUSD, 0);
+
+  // Super Admin 100% Original Genuine Deposit Breakdown (No artificial floor)
   const depositStats = {
-    total: Math.max(2650.00, realTotalDeposit),
-    today: Math.max(95.00, realTodayDeposit),
-    thisWeek: Math.max(820.00, realWeekDeposit),
-    thisMonth: Math.max(1940.00, realMonthDeposit),
-    thisYear: Math.max(2650.00, realYearDeposit),
+    total: realTotalDeposit,
+    today: realTodayDeposit,
+    thisWeek: realWeekDeposit,
+    thisMonth: realMonthDeposit,
+    thisYear: realYearDeposit,
+  };
+
+  // Super Admin 100% Original Genuine Payout Breakdown (Approved Withdrawals)
+  const payoutStats = {
+    total: realTotalPayout,
+    today: realTodayPayout,
+    thisWeek: realWeekPayout,
+    thisMonth: realMonthPayout,
+    thisYear: realYearPayout,
+    count: approvedWithdrawals.length,
   };
 
   // Platform Net Profit Calculations across settled rounds:
@@ -142,13 +167,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     }
   });
 
-  // Super Admin Platform Profit Totals Breakdown
+  // Super Admin 100% Original Genuine Platform Profit Breakdown (No artificial floor)
   const profitStats = {
-    total: Math.max(1485.50, totalHouseProfit),
-    today: Math.max(124.80, todayHouseProfit),
-    thisWeek: Math.max(542.10, weekHouseProfit),
-    thisMonth: Math.max(1180.40, monthHouseProfit),
-    thisYear: Math.max(1485.50, yearHouseProfit),
+    total: totalHouseProfit,
+    today: todayHouseProfit,
+    thisWeek: weekHouseProfit,
+    thisMonth: monthHouseProfit,
+    thisYear: yearHouseProfit,
   };
 
   const handleSaveSettings = (e: React.FormEvent) => {
@@ -265,7 +290,89 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         </div>
       </div>
 
-      {/* SECTION 2: SUPER ADMIN PLATFORM PROFIT ANALYTICS */}
+      {/* SECTION 2: SUPER ADMIN PAYOUT ANALYTICS */}
+      <div className="space-y-2.5">
+        <div className="flex items-center justify-between px-1">
+          <div className="flex items-center gap-2">
+            <ArrowUpCircle className="w-4 h-4 text-rose-400" />
+            <h3 className="text-xs font-black text-slate-200 uppercase tracking-wider">
+              Super Admin Payout Analytics (USD)
+            </h3>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-rose-400 font-mono font-bold bg-rose-500/10 px-2 py-0.5 rounded-md border border-rose-500/20">
+              {payoutStats.count} Paid Withdrawals
+            </span>
+            <span className="text-[10px] text-slate-400 font-mono">
+              100% Genuine Ledger
+            </span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 sm:gap-3">
+          {/* Total Payout */}
+          <div className="bg-slate-900/90 border border-rose-500/30 rounded-2xl p-3 sm:p-4 shadow-sm">
+            <div className="flex items-center justify-between text-rose-400 mb-1">
+              <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider">Total Payout</span>
+              <ArrowUpCircle className="w-3.5 h-3.5" />
+            </div>
+            <div className="text-lg sm:text-xl font-black text-rose-300 font-mono">
+              ${payoutStats.total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </div>
+            <span className="text-[10px] text-slate-400 mt-1 block">All-time approved payouts</span>
+          </div>
+
+          {/* Today Payout */}
+          <div className="bg-slate-900/90 border border-slate-800 hover:border-rose-500/30 rounded-2xl p-3 sm:p-4 shadow-sm transition">
+            <div className="flex items-center justify-between text-pink-400 mb-1">
+              <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider">Today Payout</span>
+              <Clock className="w-3.5 h-3.5" />
+            </div>
+            <div className="text-lg sm:text-xl font-black text-pink-300 font-mono">
+              ${payoutStats.today.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </div>
+            <span className="text-[10px] text-slate-400 mt-1 block">Today 00:00 - now</span>
+          </div>
+
+          {/* This Week Payout */}
+          <div className="bg-slate-900/90 border border-slate-800 hover:border-rose-500/30 rounded-2xl p-3 sm:p-4 shadow-sm transition">
+            <div className="flex items-center justify-between text-orange-400 mb-1">
+              <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider">This Week Payout</span>
+              <Calendar className="w-3.5 h-3.5" />
+            </div>
+            <div className="text-lg sm:text-xl font-black text-orange-300 font-mono">
+              ${payoutStats.thisWeek.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </div>
+            <span className="text-[10px] text-slate-400 mt-1 block">Current week</span>
+          </div>
+
+          {/* This Month Payout */}
+          <div className="bg-slate-900/90 border border-slate-800 hover:border-rose-500/30 rounded-2xl p-3 sm:p-4 shadow-sm transition">
+            <div className="flex items-center justify-between text-amber-400 mb-1">
+              <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider">This Month Payout</span>
+              <Calendar className="w-3.5 h-3.5" />
+            </div>
+            <div className="text-lg sm:text-xl font-black text-amber-300 font-mono">
+              ${payoutStats.thisMonth.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </div>
+            <span className="text-[10px] text-slate-400 mt-1 block">Current calendar month</span>
+          </div>
+
+          {/* This Year Payout */}
+          <div className="bg-slate-900/90 border border-slate-800 hover:border-rose-500/30 rounded-2xl p-3 sm:p-4 shadow-sm transition col-span-2 sm:col-span-1">
+            <div className="flex items-center justify-between text-purple-400 mb-1">
+              <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider">This Year Payout</span>
+              <Award className="w-3.5 h-3.5" />
+            </div>
+            <div className="text-lg sm:text-xl font-black text-purple-300 font-mono">
+              ${payoutStats.thisYear.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </div>
+            <span className="text-[10px] text-slate-400 mt-1 block">Annual {now.getFullYear()}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* SECTION 3: SUPER ADMIN PLATFORM PROFIT ANALYTICS */}
       <div className="space-y-2.5">
         <div className="flex items-center justify-between px-1">
           <div className="flex items-center gap-2">

@@ -6,7 +6,7 @@
       "phone": "01883239867",
       "password": "635366",
       "walletBalance": 25,
-      "lockedBonusBalance": 1.0,
+      "lockedBonusBalance": 1,
       "frozenWithdrawal": 0,
       "totalWon": 0,
       "totalLost": 0,
@@ -20,7 +20,10 @@
       "firstDepositDone": false,
       "lastWeeklyClaim": 0,
       "lastMonthlyClaim": 0,
-      "createdAt": 1794050000000
+      "createdAt": 1794050000000,
+      "nid": "19985672819401",
+      "securityQuestion": "What is your childhood nickname?",
+      "securityAnswer": "shanto"
     },
     {
       "id": "usr_player_1",
@@ -28,7 +31,7 @@
       "phone": "01712345678",
       "password": "123456",
       "walletBalance": 25,
-      "lockedBonusBalance": 1.0,
+      "lockedBonusBalance": 1,
       "frozenWithdrawal": 0,
       "totalWon": 0,
       "totalLost": 0,
@@ -41,7 +44,10 @@
       "isSuspended": false,
       "createdAt": 1793450121195,
       "lastDailyClaim": 0,
-      "lastWeeklyClaim": 0
+      "lastWeeklyClaim": 0,
+      "nid": "19954718294012",
+      "securityQuestion": "What is your mother's maiden name?",
+      "securityAnswer": "khatun"
     },
     {
       "id": "usr_admin",
@@ -96,11 +102,49 @@
       "lastWeeklyClaim": 0,
       "isSuspended": false,
       "createdAt": 1793962786983
+    },
+    {
+      "id": "usr_1794396863562_239",
+      "name": "Test User",
+      "phone": "01855556666",
+      "password": "mynewpassword888",
+      "nid": "19938887771122",
+      "securityQuestion": "What is your childhood nickname?",
+      "securityAnswer": "babu",
+      "walletBalance": 0,
+      "frozenWithdrawal": 0,
+      "totalWon": 0,
+      "totalLost": 0,
+      "role": "USER",
+      "binancePayId": "",
+      "binanceAddress": "",
+      "referralCode": "SP-6666TE",
+      "referredBy": "",
+      "referralCount": 0,
+      "referralBonusEarned": 0,
+      "referralWagerRequirement": 0,
+      "totalWagered": 0,
+      "firstDepositDone": false,
+      "lastDailyClaim": 0,
+      "lastWeeklyClaim": 0,
+      "lastMonthlyClaim": 0,
+      "isSuspended": false,
+      "createdAt": 1794396863562
     }
   ],
   "deposits": [],
   "withdrawals": [],
   "notifications": [
+    {
+      "id": "notif_1794396863562_welcome",
+      "userId": "usr_1794396863562_239",
+      "title": "🎉 Welcome to Shapla Poribar!",
+      "message": "Your account has been successfully created and verified with NID. Complete your 1st deposit (min $5.00) to receive your $1.00 welcome signup bonus!",
+      "type": "SYSTEM",
+      "badge": "WELCOME",
+      "isRead": false,
+      "createdAt": 1794396863562
+    },
     {
       "id": "notif_1794048610916_s40j",
       "userId": "all",
@@ -120,5 +164,7 @@
       "badge": "HOT",
       "updatedAt": 1794048610916
     }
-  }
+  },
+  "bets": [],
+  "verificationCodes": {}
 }

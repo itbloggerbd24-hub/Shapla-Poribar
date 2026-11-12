@@ -78,13 +78,58 @@ async function startServer() {
     }
   };
 
-  // Phone Normalization Helper
-  const normalizePhone = (phone: string) => {
-    return String(phone || '').replace(/[\s\-\(\)\+]/g, '');
+  // Bulletproof Phone Normalization: handles Bangladeshi 01XXXXXXXXX, +8801XXXXXXXXX, 8801XXXXXXXXX, 1XXXXXXXXX, spaces, dashes
+  const normalizePhone = (phone: string): string => {
+    if (!phone) return '';
+    let digits = String(phone).replace(/\D/g, '');
+    if (digits.startsWith('880') && digits.length >= 13) {
+      digits = digits.slice(2);
+    } else if (digits.startsWith('88') && digits.length >= 13) {
+      digits = digits.slice(2);
+    }
+    if (digits.length === 10 && digits.startsWith('1')) {
+      digits = '0' + digits;
+    }
+    return digits || String(phone).trim();
   };
 
-  // In-memory verification codes store: phone -> { code: string, expiresAt: number }
+  const isPhoneMatch = (p1: string, p2: string): boolean => {
+    const c1 = normalizePhone(p1);
+    const c2 = normalizePhone(p2);
+    if (!c1 || !c2) return false;
+    if (c1 === c2) return true;
+    if (c1.length >= 10 && c2.length >= 10 && c1.slice(-10) === c2.slice(-10)) return true;
+    return false;
+  };
+
+  // In-memory + persisted verification codes store: phone -> { code: string, expiresAt: number }
   const verificationCodes: Record<string, { code: string; expiresAt: number }> = {};
+
+  const getVerificationEntry = (phone: string): { code: string; expiresAt: number } | null => {
+    const clean = normalizePhone(phone);
+    if (verificationCodes[clean]) return verificationCodes[clean];
+    for (const [k, v] of Object.entries(verificationCodes)) {
+      if (isPhoneMatch(k, clean)) return v;
+    }
+    const db = readDb();
+    if (db.verificationCodes) {
+      if (db.verificationCodes[clean]) return db.verificationCodes[clean];
+      for (const [k, v] of Object.entries(db.verificationCodes as Record<string, any>)) {
+        if (isPhoneMatch(k, clean)) return v;
+      }
+    }
+    return null;
+  };
+
+  const saveVerificationCode = (phone: string, code: string) => {
+    const clean = normalizePhone(phone);
+    const entry = { code, expiresAt: Date.now() + 15 * 60 * 1000 };
+    verificationCodes[clean] = entry;
+    const db = readDb();
+    if (!db.verificationCodes) db.verificationCodes = {};
+    db.verificationCodes[clean] = entry;
+    writeDb(db);
+  };
 
   // Ensure initial data such as demo account 01883239867
   const ensureInitialData = () => {
@@ -96,10 +141,14 @@ async function startServer() {
         db.bets = [];
         changed = true;
       }
+      if (!db.verificationCodes) {
+        db.verificationCodes = {};
+        changed = true;
+      }
 
       // Demo test user requested by user: 01883239867 / 635366
       const demoPhone = '01883239867';
-      const demoUserIndex = db.users.findIndex((u: any) => normalizePhone(u.phone) === demoPhone);
+      const demoUserIndex = db.users.findIndex((u: any) => isPhoneMatch(u.phone, demoPhone));
       if (demoUserIndex === -1) {
         db.users.push({
           id: 'usr_demo_01883239867',
@@ -147,7 +196,7 @@ async function startServer() {
       }
 
       // Ensure Alex Hunter has NID & security question
-      const alex = db.users.find((u: any) => normalizePhone(u.phone) === '01712345678');
+      const alex = db.users.find((u: any) => isPhoneMatch(u.phone, '01712345678'));
       if (alex) {
         if (!alex.nid) { alex.nid = '19954718294012'; changed = true; }
         if (!alex.securityQuestion) { alex.securityQuestion = "What is your mother's maiden name?"; changed = true; }
@@ -178,7 +227,7 @@ async function startServer() {
       }
 
       const db = readDb();
-      const existing = db.users.find((u: any) => normalizePhone(u.phone) === cleanPhone);
+      const existing = db.users.find((u: any) => isPhoneMatch(u.phone, cleanPhone));
       if (existing) {
         return res.status(400).json({ 
           error: 'An account is already registered with this phone number. Please sign in or reset your password.' 
@@ -187,16 +236,13 @@ async function startServer() {
 
       // Generate 6-digit numeric verification code
       const code = Math.floor(100000 + Math.random() * 900000).toString();
-      verificationCodes[cleanPhone] = {
-        code,
-        expiresAt: Date.now() + 5 * 60 * 1000, // 5 minutes
-      };
+      saveVerificationCode(cleanPhone, code);
 
       return res.json({
         success: true,
         message: `Verification code sent to ${phone}.`,
         code, // Returned for simulated SMS prompt in UI
-        expiresInSeconds: 300,
+        expiresInSeconds: 900,
       });
     } catch (err: any) {
       console.error('Send verification code error:', err);
@@ -213,7 +259,7 @@ async function startServer() {
       }
 
       const cleanPhone = normalizePhone(phone);
-      const entry = verificationCodes[cleanPhone];
+      const entry = getVerificationEntry(cleanPhone);
 
       if (!entry || Date.now() > entry.expiresAt) {
         return res.status(400).json({ error: 'Verification code has expired or does not exist. Please request a new code.' });
@@ -262,7 +308,7 @@ async function startServer() {
       }
 
       // Check verification code
-      const entry = verificationCodes[cleanPhone];
+      const entry = getVerificationEntry(cleanPhone);
       if (!entry || Date.now() > entry.expiresAt) {
         return res.status(400).json({ error: 'Please request and verify your phone number with the 6-digit SMS code.' });
       }
@@ -272,8 +318,8 @@ async function startServer() {
 
       const db = readDb();
 
-      // Check if phone already registered
-      const existingPhone = db.users.find((u: any) => normalizePhone(u.phone) === cleanPhone);
+      // Check if phone already registered using bulletproof isPhoneMatch
+      const existingPhone = db.users.find((u: any) => isPhoneMatch(u.phone, cleanPhone));
       if (existingPhone) {
         return res.status(400).json({ 
           error: 'An account is already registered with this phone number. Multiple accounts are not permitted.' 
@@ -296,7 +342,7 @@ async function startServer() {
       const newUser = {
         id: `usr_${Date.now()}_${Math.floor(100 + Math.random() * 900)}`,
         name: cleanName,
-        phone: String(phone).trim(),
+        phone: cleanPhone,
         password: String(password).trim(),
         nid: cleanNid,
         securityQuestion: String(securityQuestion).trim(),
@@ -326,6 +372,9 @@ async function startServer() {
 
       // Clean up used verification code
       delete verificationCodes[cleanPhone];
+      if (db.verificationCodes) {
+        delete db.verificationCodes[cleanPhone];
+      }
 
       // Add a welcome notification
       if (!db.notifications) db.notifications = [];
@@ -350,7 +399,7 @@ async function startServer() {
     }
   });
 
-  // 4. LOGIN: Universal login from any device or browser
+  // 4. LOGIN: Universal login with bulletproof isPhoneMatch
   app.post('/api/auth/login', (req, res) => {
     try {
       const { phone, password } = req.body;
@@ -361,7 +410,8 @@ async function startServer() {
       const cleanPhone = normalizePhone(phone);
       const db = readDb();
 
-      const user = db.users.find((u: any) => normalizePhone(u.phone) === cleanPhone);
+      // Find user using bulletproof isPhoneMatch (handles 01XXXXXXXXX, +8801XXXXXXXXX, 8801XXXXXXXXX, etc.)
+      const user = db.users.find((u: any) => isPhoneMatch(u.phone, cleanPhone));
       if (!user) {
         return res.status(401).json({ error: 'No account registered with this phone number. Please sign up.' });
       }
@@ -386,7 +436,40 @@ async function startServer() {
     }
   });
 
-  // 5. GET SECURITY QUESTION FOR FORGOT PASSWORD
+  // 5. SYNC LOCAL USER TO SERVER (Redundancy: if created locally, guarantee server persistence)
+  app.post('/api/auth/sync-local-user', (req, res) => {
+    try {
+      const incoming = req.body;
+      if (!incoming || !incoming.phone || !incoming.password) {
+        return res.status(400).json({ error: 'Invalid user payload' });
+      }
+      const cleanPhone = normalizePhone(incoming.phone);
+      const db = readDb();
+      const existingIndex = db.users.findIndex((u: any) => isPhoneMatch(u.phone, cleanPhone));
+      if (existingIndex !== -1) {
+        db.users[existingIndex] = {
+          ...db.users[existingIndex],
+          password: String(incoming.password).trim(),
+          name: incoming.name || db.users[existingIndex].name,
+          nid: incoming.nid || db.users[existingIndex].nid,
+          securityQuestion: incoming.securityQuestion || db.users[existingIndex].securityQuestion,
+          securityAnswer: incoming.securityAnswer || db.users[existingIndex].securityAnswer,
+        };
+      } else {
+        db.users.push({
+          ...incoming,
+          phone: cleanPhone,
+          password: String(incoming.password).trim(),
+        });
+      }
+      writeDb(db);
+      return res.json({ success: true });
+    } catch (e) {
+      return res.status(500).json({ error: 'Sync failed' });
+    }
+  });
+
+  // 6. GET SECURITY QUESTION FOR FORGOT PASSWORD
   app.post('/api/auth/get-security-question', (req, res) => {
     try {
       const { phone } = req.body;
@@ -396,7 +479,7 @@ async function startServer() {
 
       const cleanPhone = normalizePhone(phone);
       const db = readDb();
-      const user = db.users.find((u: any) => normalizePhone(u.phone) === cleanPhone);
+      const user = db.users.find((u: any) => isPhoneMatch(u.phone, cleanPhone));
 
       if (!user) {
         return res.status(404).json({ error: 'No account found with this phone number. Please verify.' });
@@ -409,10 +492,10 @@ async function startServer() {
     }
   });
 
-  // 6. RESET PASSWORD WITH SECURITY QUESTION
+  // 7. RESET PASSWORD WITH SECURITY QUESTION
   app.post('/api/auth/reset-with-security-question', (req, res) => {
     try {
-      const { phone, securityAnswer, newPassword } = req.body;
+      const { phone, securityQuestion, securityAnswer, newPassword } = req.body;
       if (!phone || !securityAnswer || !newPassword) {
         return res.status(400).json({ error: 'Phone number, security answer, and new password are required.' });
       }
@@ -423,13 +506,25 @@ async function startServer() {
 
       const cleanPhone = normalizePhone(phone);
       const db = readDb();
-      const userIndex = db.users.findIndex((u: any) => normalizePhone(u.phone) === cleanPhone);
+      const userIndex = db.users.findIndex((u: any) => isPhoneMatch(u.phone, cleanPhone));
 
       if (userIndex === -1) {
         return res.status(404).json({ error: 'No account found with this phone number.' });
       }
 
       const user = db.users[userIndex];
+
+      // If user selected a security question, verify it matches
+      if (securityQuestion && user.securityQuestion) {
+        const normQ1 = String(user.securityQuestion).trim().toLowerCase();
+        const normQ2 = String(securityQuestion).trim().toLowerCase();
+        if (normQ1 !== normQ2) {
+          return res.status(400).json({ 
+            error: 'The selected security question does not match this account. Please select the question you chose during registration, or click "Forgot Security Question" below to recover via NID.' 
+          });
+        }
+      }
+
       const storedAnswer = String(user.securityAnswer || '').trim().toLowerCase();
       const providedAnswer = String(securityAnswer).trim().toLowerCase();
 
@@ -448,7 +543,7 @@ async function startServer() {
     }
   });
 
-  // 7. RECOVER SECURITY QUESTION WITH NID AND PHONE NUMBER
+  // 8. RECOVER SECURITY QUESTION WITH NID AND PHONE NUMBER
   app.post('/api/auth/recover-security-question', (req, res) => {
     try {
       const { phone, nid } = req.body;
@@ -460,7 +555,7 @@ async function startServer() {
       const cleanNid = String(nid).trim();
 
       const db = readDb();
-      const user = db.users.find((u: any) => normalizePhone(u.phone) === cleanPhone);
+      const user = db.users.find((u: any) => isPhoneMatch(u.phone, cleanPhone));
 
       if (!user) {
         return res.status(404).json({ error: 'No account registered with this phone number.' });

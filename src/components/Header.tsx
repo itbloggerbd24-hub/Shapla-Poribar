@@ -17,7 +17,10 @@ import {
   Bell,
   Sparkles,
   Gift,
-  ChevronDown
+  ChevronDown,
+  TrendingUp,
+  DollarSign,
+  Trophy
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -28,6 +31,11 @@ interface HeaderProps {
   onOpenReferral?: () => void;
   onOpenRewards?: () => void;
   onOpenNotifications?: () => void;
+  onOpenProfile?: () => void;
+  onOpenDepositAnalytics?: () => void;
+  onOpenPayoutAnalytics?: () => void;
+  onOpenLeaderboard?: () => void;
+  onOpenMyBets?: () => void;
   unreadNoticeCount?: number;
   isMuted: boolean;
   onToggleSound: () => void;
@@ -43,6 +51,11 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenReferral,
   onOpenRewards,
   onOpenNotifications,
+  onOpenProfile,
+  onOpenDepositAnalytics,
+  onOpenPayoutAnalytics,
+  onOpenLeaderboard,
+  onOpenMyBets,
   unreadNoticeCount = 0,
   isMuted,
   onToggleSound,
@@ -172,6 +185,63 @@ export const Header: React.FC<HeaderProps> = ({
                         <div className="text-[10px] text-slate-400 font-normal">Cash out to Binance</div>
                       </div>
                     </button>
+
+                    {onOpenProfile && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsBalanceMenuOpen(false);
+                          onOpenProfile();
+                        }}
+                        className="w-full p-2.5 rounded-xl hover:bg-slate-800 text-left flex items-center gap-2.5 transition cursor-pointer group text-xs font-bold text-slate-300 hover:text-white mt-1 border-t border-slate-800/80 pt-2"
+                      >
+                        <div className="w-8 h-8 rounded-lg bg-amber-400/20 flex items-center justify-center shrink-0">
+                          <User className="w-4 h-4 text-amber-400" />
+                        </div>
+                        <div>
+                          <div className="text-white text-xs font-bold leading-tight">My Profile Details</div>
+                          <div className="text-[10px] text-slate-400 font-normal">View identity & records</div>
+                        </div>
+                      </button>
+                    )}
+
+                    {onOpenDepositAnalytics && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsBalanceMenuOpen(false);
+                          onOpenDepositAnalytics();
+                        }}
+                        className="w-full p-2.5 rounded-xl hover:bg-emerald-500/10 text-left flex items-center gap-2.5 transition cursor-pointer group text-xs font-bold text-emerald-400 hover:text-emerald-300 mt-1"
+                      >
+                        <div className="w-8 h-8 rounded-lg bg-emerald-500/20 flex items-center justify-center shrink-0">
+                          <TrendingUp className="w-4 h-4 text-emerald-400" />
+                        </div>
+                        <div>
+                          <div className="text-white text-xs font-bold leading-tight">Deposit Analytics</div>
+                          <div className="text-[10px] text-slate-400 font-normal">View verified platform volume</div>
+                        </div>
+                      </button>
+                    )}
+
+                    {onOpenPayoutAnalytics && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsBalanceMenuOpen(false);
+                          onOpenPayoutAnalytics();
+                        }}
+                        className="w-full p-2.5 rounded-xl hover:bg-amber-500/10 text-left flex items-center gap-2.5 transition cursor-pointer group text-xs font-bold text-amber-400 hover:text-amber-300 mt-1"
+                      >
+                        <div className="w-8 h-8 rounded-lg bg-amber-500/20 flex items-center justify-center shrink-0">
+                          <DollarSign className="w-4 h-4 text-amber-400" />
+                        </div>
+                        <div>
+                          <div className="text-white text-xs font-bold leading-tight">Payout Analytics</div>
+                          <div className="text-[10px] text-slate-400 font-normal">View live cashout proof</div>
+                        </div>
+                      </button>
+                    )}
                   </div>
                 </>
               )}
@@ -286,23 +356,65 @@ export const Header: React.FC<HeaderProps> = ({
                 </button>
               </div>
 
-              {/* Player Profile Card in Drawer */}
-              <div className="my-4 p-3 rounded-2xl bg-slate-950 border border-slate-800/80">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-9 h-9 rounded-full bg-amber-400/20 border border-amber-400/40 text-amber-300 font-bold text-xs flex items-center justify-center">
-                    <User className="w-4 h-4" />
-                  </div>
-                  <div className="truncate">
-                    <div className="text-xs font-bold text-white truncate">{user.name}</div>
-                    <div className="text-[11px] font-mono text-emerald-400 font-bold">
-                      ${user.walletBalance.toFixed(2)} USD
+              {/* Player Profile Card in Drawer (Click icon or card to view profile details) */}
+              <div 
+                onClick={() => {
+                  setIsMobileMenuOpen(false);
+                  onOpenProfile?.();
+                }}
+                className="my-4 p-3 rounded-2xl bg-slate-950 hover:bg-slate-900 border border-slate-800/80 hover:border-amber-500/40 transition cursor-pointer select-none group shadow-md"
+                title="Click profile icon to view details"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    {/* Clickable Profile Icon */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setIsMobileMenuOpen(false);
+                        onOpenProfile?.();
+                      }}
+                      className="w-10 h-10 rounded-full bg-gradient-to-tr from-amber-500/25 to-yellow-500/20 hover:from-amber-500/40 hover:to-yellow-500/30 border border-amber-400/50 text-amber-300 font-bold text-xs flex items-center justify-center shrink-0 shadow-sm ring-2 ring-amber-400/20 group-hover:ring-amber-400/40 transform active:scale-95 transition cursor-pointer"
+                      title="Click profile icon to view details"
+                      aria-label="Profile Details"
+                    >
+                      <User className="w-5 h-5 text-amber-400 group-hover:scale-110 transition-transform" />
+                    </button>
+                    <div className="truncate">
+                      <div className="text-xs font-bold text-white truncate group-hover:text-amber-300 transition-colors flex items-center gap-1">
+                        <span>{user.name}</span>
+                      </div>
+                      <div className="text-[11px] font-mono text-emerald-400 font-bold">
+                        ${user.walletBalance.toFixed(2)} USD
+                      </div>
                     </div>
                   </div>
+                  <span className="text-[10px] text-amber-400 font-bold px-2 py-0.5 rounded-lg bg-amber-500/10 border border-amber-500/20 shrink-0 group-hover:bg-amber-500/20 transition">
+                    Details →
+                  </span>
                 </div>
               </div>
 
               {/* Navigation Links */}
               <div className="space-y-1.5 text-xs font-semibold">
+                {/* Dedicated Profile Details Link */}
+                {onOpenProfile && (
+                  <button
+                    onClick={() => {
+                      setIsMobileMenuOpen(false);
+                      onOpenProfile();
+                    }}
+                    className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl bg-slate-800/60 hover:bg-slate-800 text-slate-200 hover:text-white border border-slate-700/60 transition cursor-pointer"
+                  >
+                    <div className="flex items-center gap-3">
+                      <User className="w-4 h-4 text-amber-400" />
+                      <span className="font-bold">My Profile Details</span>
+                    </div>
+                    <span className="text-[10px] font-mono text-slate-400">View</span>
+                  </button>
+                )}
+
                 <button
                   onClick={() => {
                     setIsMobileMenuOpen(false);
@@ -329,6 +441,89 @@ export const Header: React.FC<HeaderProps> = ({
                     10 AM – 10 PM
                   </span>
                 </button>
+
+                {/* 4 Requested Navigation Options: Deposit Analytics, Payout Analytics, Leaderboard, My Bets */}
+                <div className="pt-2 pb-1 space-y-1.5 border-t border-b border-slate-800/80 my-2">
+                  <div className="px-1 text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                    Analytics & Gameplay
+                  </div>
+
+                  {/* 1. Deposit Analytics */}
+                  {onOpenDepositAnalytics && (
+                    <button
+                      onClick={() => {
+                        setIsMobileMenuOpen(false);
+                        onOpenDepositAnalytics();
+                      }}
+                      className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 transition cursor-pointer"
+                    >
+                      <div className="flex items-center gap-3">
+                        <TrendingUp className="w-4 h-4 text-emerald-400" />
+                        <span className="font-bold text-white">Deposit Analytics</span>
+                      </div>
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold">
+                        Live
+                      </span>
+                    </button>
+                  )}
+
+                  {/* 2. Payout Analytics */}
+                  {onOpenPayoutAnalytics && (
+                    <button
+                      onClick={() => {
+                        setIsMobileMenuOpen(false);
+                        onOpenPayoutAnalytics();
+                      }}
+                      className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 transition cursor-pointer"
+                    >
+                      <div className="flex items-center gap-3">
+                        <DollarSign className="w-4 h-4 text-amber-400" />
+                        <span className="font-bold text-white">Payout Analytics</span>
+                      </div>
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold">
+                        Proof
+                      </span>
+                    </button>
+                  )}
+
+                  {/* 3. Leaderboard */}
+                  {onOpenLeaderboard && (
+                    <button
+                      onClick={() => {
+                        setIsMobileMenuOpen(false);
+                        onOpenLeaderboard();
+                      }}
+                      className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl bg-slate-800/60 hover:bg-slate-800 text-yellow-300 border border-slate-700/60 transition cursor-pointer"
+                    >
+                      <div className="flex items-center gap-3">
+                        <Trophy className="w-4 h-4 text-yellow-400" />
+                        <span className="font-bold text-white">Leaderboard</span>
+                      </div>
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-900 text-yellow-400 font-bold">
+                        Top Rank
+                      </span>
+                    </button>
+                  )}
+
+                  {/* 4. My Bets */}
+                  {onOpenMyBets && (
+                    <button
+                      onClick={() => {
+                        setIsMobileMenuOpen(false);
+                        onOpenMyBets();
+                      }}
+                      className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl bg-slate-800/60 hover:bg-slate-800 text-slate-200 border border-slate-700/60 transition cursor-pointer"
+                    >
+                      <div className="flex items-center gap-3">
+                        <Coins className="w-4 h-4 text-amber-400" />
+                        <span className="font-bold text-white">My Bets</span>
+                      </div>
+                      <span className="text-[10px] font-mono text-slate-400">
+                        History
+                      </span>
+                    </button>
+                  )}
+                </div>
 
                 {onOpenReferral && (
                   <button

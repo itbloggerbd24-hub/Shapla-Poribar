@@ -52,7 +52,26 @@ const saveLocalUsers = (users: UserProfile[]) => {
 };
 
 export const normalizePhone = (phone: string): string => {
-  return String(phone || '').replace(/[\s\-\(\)\+]/g, '');
+  if (!phone) return '';
+  let digits = String(phone).replace(/\D/g, '');
+  if (digits.startsWith('880') && digits.length >= 13) {
+    digits = digits.slice(2);
+  } else if (digits.startsWith('88') && digits.length >= 13) {
+    digits = digits.slice(2);
+  }
+  if (digits.length === 10 && digits.startsWith('1')) {
+    digits = '0' + digits;
+  }
+  return digits || String(phone).trim();
+};
+
+export const isPhoneMatch = (p1: string, p2: string): boolean => {
+  const c1 = normalizePhone(p1);
+  const c2 = normalizePhone(p2);
+  if (!c1 || !c2) return false;
+  if (c1 === c2) return true;
+  if (c1.length >= 10 && c2.length >= 10 && c1.slice(-10) === c2.slice(-10)) return true;
+  return false;
 };
 
 export const authApi = {
@@ -116,12 +135,25 @@ export const authApi = {
       if (!res.ok) {
         return { success: false, error: json.error || 'Registration failed' };
       }
+      // Guarantee local storage persistence as well
+      if (json.user) {
+        const localUsers = getLocalUsers();
+        const updated = localUsers.filter(u => !isPhoneMatch(u.phone, data.phone));
+        updated.push({
+          ...json.user,
+          password: data.password.trim(),
+          nid: data.nid.trim(),
+          securityQuestion: data.securityQuestion.trim(),
+          securityAnswer: data.securityAnswer.trim().toLowerCase(),
+        });
+        saveLocalUsers(updated);
+      }
       return { success: true, user: json.user };
     } catch (e) {
       // Offline / Local database fallback
       const cleanPhone = normalizePhone(data.phone);
       const localUsers = getLocalUsers();
-      if (localUsers.some(u => normalizePhone(u.phone) === cleanPhone)) {
+      if (localUsers.some(u => isPhoneMatch(u.phone, cleanPhone))) {
         return { 
           success: false, 
           error: 'An account is already registered with this phone number. Multiple accounts are not allowed.' 
@@ -132,7 +164,7 @@ export const authApi = {
       const newUser: UserProfile = {
         id: `usr_${Date.now()}_${Math.floor(100 + Math.random() * 900)}`,
         name: data.name.trim(),
-        phone: data.phone.trim(),
+        phone: cleanPhone,
         password: data.password.trim(),
         nid: data.nid.trim(),
         securityQuestion: data.securityQuestion.trim(),
@@ -157,7 +189,7 @@ export const authApi = {
     }
   },
 
-  // Login: universal from any device or browser
+  // Login: universal from any device or browser with redundancy
   async login(phone: string, password: string): Promise<AuthResponse> {
     try {
       const res = await fetch(`${API_BASE}/auth/login`, {
@@ -166,19 +198,39 @@ export const authApi = {
         body: JSON.stringify({ phone, password }),
       });
       const json = await res.json();
-      if (!res.ok) {
-        return { 
-          success: false, 
-          error: json.error || 'Login failed',
-          isSuspended: json.isSuspended
-        };
+      if (res.ok && json.success && json.user) {
+        // Cache user in localStorage with password
+        const localUsers = getLocalUsers();
+        const updated = localUsers.filter(u => !isPhoneMatch(u.phone, phone));
+        updated.push({ ...json.user, password: password.trim() });
+        saveLocalUsers(updated);
+        return { success: true, user: json.user };
       }
-      return { success: true, user: json.user };
+
+      // If server returned 401 ("No account registered"), check local storage redundancy
+      const localUsers = getLocalUsers();
+      const localUser = localUsers.find(u => isPhoneMatch(u.phone, phone));
+      if (localUser && localUser.password === password.trim()) {
+        // Auto-sync this user to server db so it exists everywhere
+        try {
+          await fetch(`${API_BASE}/auth/sync-local-user`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(localUser),
+          });
+        } catch (syncErr) {}
+        return { success: true, user: localUser };
+      }
+
+      return { 
+        success: false, 
+        error: json.error || 'Login failed',
+        isSuspended: json.isSuspended
+      };
     } catch (e) {
       // Local database fallback
-      const cleanPhone = normalizePhone(phone);
       const localUsers = getLocalUsers();
-      const user = localUsers.find(u => normalizePhone(u.phone) === cleanPhone);
+      const user = localUsers.find(u => isPhoneMatch(u.phone, phone));
 
       if (!user) {
         return { success: false, error: 'No account found with this phone number.' };
@@ -214,39 +266,58 @@ export const authApi = {
       }
       return { success: true, securityQuestion: json.securityQuestion };
     } catch (e) {
-      const cleanPhone = normalizePhone(phone);
       const localUsers = getLocalUsers();
-      const user = localUsers.find(u => normalizePhone(u.phone) === cleanPhone);
+      const user = localUsers.find(u => isPhoneMatch(u.phone, phone));
       if (!user) return { success: false, error: 'No account found with this phone number.' };
       return { success: true, securityQuestion: user.securityQuestion || "What is your childhood nickname?" };
     }
   },
 
-  // Reset password using Security Question
-  async resetWithSecurityQuestion(phone: string, securityAnswer: string, newPassword: string): Promise<AuthResponse> {
+  // Reset password using Security Question (supports selecting question)
+  async resetWithSecurityQuestion(
+    phone: string, 
+    securityQuestion: string, 
+    securityAnswer: string, 
+    newPassword: string
+  ): Promise<AuthResponse> {
     try {
       const res = await fetch(`${API_BASE}/auth/reset-with-security-question`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, securityAnswer, newPassword }),
+        body: JSON.stringify({ phone, securityQuestion, securityAnswer, newPassword }),
       });
       const json = await res.json();
       if (!res.ok) {
         return { success: false, error: json.error || 'Reset failed.' };
       }
+      // Also update local storage
+      const localUsers = getLocalUsers();
+      const userIdx = localUsers.findIndex(u => isPhoneMatch(u.phone, phone));
+      if (userIdx !== -1) {
+        localUsers[userIdx].password = newPassword.trim();
+        saveLocalUsers(localUsers);
+      }
       return { success: true, message: json.message };
     } catch (e) {
-      const cleanPhone = normalizePhone(phone);
       const localUsers = getLocalUsers();
-      const index = localUsers.findIndex(u => normalizePhone(u.phone) === cleanPhone);
+      const index = localUsers.findIndex(u => isPhoneMatch(u.phone, phone));
 
       if (index === -1) {
         return { success: false, error: 'No account found with this phone number.' };
       }
 
       const user = localUsers[index];
+      if (securityQuestion && user.securityQuestion) {
+        if (user.securityQuestion.toLowerCase() !== securityQuestion.trim().toLowerCase()) {
+          return {
+            success: false,
+            error: 'The selected security question does not match this account. Please select the question you chose during registration, or click "Forgot Security Question" below.'
+          };
+        }
+      }
+
       if (user.securityAnswer && user.securityAnswer.toLowerCase() !== securityAnswer.trim().toLowerCase()) {
-        return { success: false, error: 'Incorrect answer to security question.' };
+        return { success: false, error: 'Incorrect answer to security question. If forgotten, recover via NID.' };
       }
 
       localUsers[index].password = newPassword.trim();
@@ -282,9 +353,8 @@ export const authApi = {
         message: json.message,
       };
     } catch (e) {
-      const cleanPhone = normalizePhone(phone);
       const localUsers = getLocalUsers();
-      const user = localUsers.find(u => normalizePhone(u.phone) === cleanPhone);
+      const user = localUsers.find(u => isPhoneMatch(u.phone, phone));
 
       if (!user) return { success: false, error: 'No account registered with this phone number.' };
       if (!user.nid || String(user.nid).trim() !== String(nid).trim()) {

@@ -82,12 +82,12 @@ export const AuthPage: React.FC<AuthPageProps> = ({
   } | null>(null);
 
   // Forgot password states
-  // 'PHONE' -> Step 1 (phone lookup)
-  // 'QUESTION' -> Step 2 (answer question & new password)
-  // 'RECOVER_NID' -> Alternative (if forgot question, verify NID + Phone to receive SMS with question & answer)
-  const [forgotStep, setForgotStep] = useState<'PHONE' | 'QUESTION' | 'RECOVER_NID'>('PHONE');
+  // Forgot password states:
+  // 'RESET_FORM' -> Select security question + answer below + new password
+  // 'RECOVER_NID' -> Forgot question? Verify NID + Phone to receive SMS with question & answer
+  const [forgotStep, setForgotStep] = useState<'RESET_FORM' | 'RECOVER_NID'>('RESET_FORM');
   const [forgotPhone, setForgotPhone] = useState('');
-  const [forgotSecurityQuestion, setForgotSecurityQuestion] = useState('');
+  const [forgotSecurityQuestion, setForgotSecurityQuestion] = useState(SECURITY_QUESTIONS[0]);
   const [forgotSecurityAnswer, setForgotSecurityAnswer] = useState('');
   const [forgotNid, setForgotNid] = useState('');
   const [forgotNewPassword, setForgotNewPassword] = useState('');
@@ -112,7 +112,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
     setTab(newTab);
     setError(null);
     setSuccessMsg(null);
-    setForgotStep('PHONE');
+    setForgotStep('RESET_FORM');
   };
 
   // 1. Handle Login
@@ -159,7 +159,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
       setSimulatedSms({
         phone: regPhone.trim(),
         code,
-        message: `Your Shapla Poribar account verification code is: ${code}. (Valid for 5 minutes).`,
+        message: `Your Shapla Poribar account verification code is: ${code}. (Valid for 15 minutes).`,
         timestamp: Date.now(),
       });
       setSuccessMsg(`Verification code sent to ${regPhone.trim()}.`);
@@ -218,40 +218,26 @@ export const AuthPage: React.FC<AuthPageProps> = ({
     setIsLoading(false);
 
     if (res.success && res.user) {
+      setPhone(regPhone.trim());
       onLoginSuccess(res.user);
     } else {
       setError(res.error || 'Failed to create account.');
     }
   };
 
-  // 4. Handle Forgot Password Step 1: Lookup Phone & Question
-  const handleFindSecurityQuestion = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!forgotPhone.trim()) {
-      setError('Please enter your registered phone number.');
-      return;
-    }
-
-    setIsLoading(true);
-    setError(null);
-
-    const res = await authApi.getSecurityQuestion(forgotPhone.trim());
-    setIsLoading(false);
-
-    if (res.success && res.securityQuestion) {
-      setForgotSecurityQuestion(res.securityQuestion);
-      setForgotStep('QUESTION');
-      setSuccessMsg(`Account found. Please answer your security question below.`);
-    } else {
-      setError(res.error || 'No registered account found with this phone number.');
-    }
-  };
-
-  // 5. Handle Forgot Password Step 2: Answer Question & Set New Password
+  // 4. Handle Reset Password: Phone + Selected Security Question + Security Answer + New Password
   const handleResetWithQuestionSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!forgotPhone.trim()) {
+      setError('Please provide your registered phone number.');
+      return;
+    }
+    if (!forgotSecurityQuestion) {
+      setError('Please select your security question.');
+      return;
+    }
     if (!forgotSecurityAnswer.trim()) {
-      setError('Please provide your security question answer.');
+      setError('Please provide your security question answer in the box below.');
       return;
     }
     if (forgotNewPassword.length < 6) {
@@ -259,7 +245,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
       return;
     }
     if (forgotNewPassword !== forgotConfirmPassword) {
-      setError('Passwords do not match.');
+      setError('Passwords do not match. Please verify.');
       return;
     }
 
@@ -268,6 +254,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
 
     const res = await authApi.resetWithSecurityQuestion(
       forgotPhone.trim(),
+      forgotSecurityQuestion,
       forgotSecurityAnswer.trim(),
       forgotNewPassword.trim()
     );
@@ -278,13 +265,13 @@ export const AuthPage: React.FC<AuthPageProps> = ({
       setPhone(forgotPhone.trim());
       setPassword(forgotNewPassword);
       setTab('LOGIN');
-      setForgotStep('PHONE');
+      setForgotStep('RESET_FORM');
     } else {
       setError(res.error || 'Failed to reset password.');
     }
   };
 
-  // 6. Handle Forgot Password Step 3: Recover Question via NID + Phone
+  // 5. Handle Recover Question via NID + Phone Number
   const handleRecoverViaNidSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!forgotPhone.trim() || !forgotNid.trim()) {
@@ -311,8 +298,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({
         timestamp: Date.now(),
       });
 
-      setSuccessMsg('NID and Phone verified! Your security question and answer have been sent via SMS.');
-      setForgotStep('QUESTION');
+      setSuccessMsg('Security details verified! We sent your question & answer via SMS and filled them in below. Please enter your new password.');
+      setForgotStep('RESET_FORM');
     } else {
       setError(res.error || 'Verification failed. Please check your phone number and NID number.');
     }
@@ -725,35 +712,36 @@ export const AuthPage: React.FC<AuthPageProps> = ({
             </form>
           )}
 
-          {/* 3. FORGOT PASSWORD VIEW (Security Question & NID Recovery) */}
+          {/* 3. FORGOT PASSWORD VIEW (Select Security Question + Box for Answer, with Forgot Question option) */}
           {tab === 'FORGOT' && (
             <div className="space-y-4">
               <div className="flex items-center justify-between pb-2 border-b border-slate-800">
                 <span className="text-xs font-bold text-amber-400 flex items-center gap-1.5">
                   <KeyRound className="w-4 h-4" />
                   <span>
-                    {forgotStep === 'RECOVER_NID' ? 'Recover Security Details via NID' : 'Security Question Password Reset'}
+                    {forgotStep === 'RECOVER_NID' ? 'Recover Security Question via NID' : 'Reset Password with Security Question'}
                   </span>
                 </span>
                 <button
                   type="button"
                   onClick={() => handleSwitchTab('LOGIN')}
-                  className="text-xs text-slate-400 hover:text-white cursor-pointer"
+                  className="text-xs text-slate-400 hover:text-white cursor-pointer font-medium"
                 >
                   Back to Sign In
                 </button>
               </div>
 
-              {/* Step 1: Phone Lookup */}
-              {forgotStep === 'PHONE' && (
-                <form onSubmit={handleFindSecurityQuestion} className="space-y-4">
+              {/* View 1: Main Password Reset Form (Phone + Select Security Question + Answer below + New Password) */}
+              {forgotStep === 'RESET_FORM' && (
+                <form onSubmit={handleResetWithQuestionSubmit} className="space-y-3.5">
                   <p className="text-xs text-slate-300 leading-relaxed">
-                    Enter your registered phone number. Your designated security question will be loaded to verify account ownership.
+                    Select your security question, provide the answer in the box below, and set your new password.
                   </p>
 
+                  {/* Registered Phone */}
                   <div>
-                    <label className="block text-xs font-bold text-slate-300 mb-1.5">
-                      Registered Phone Number:
+                    <label className="block text-xs font-bold text-slate-300 mb-1">
+                      Registered Phone Number: *
                     </label>
                     <div className="relative">
                       <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-500">
@@ -764,34 +752,36 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                         required
                         value={forgotPhone}
                         onChange={(e) => setForgotPhone(e.target.value)}
-                        placeholder="e.g. 01712345678"
+                        placeholder="e.g. 01883239867"
                         className="w-full bg-slate-950 border border-slate-700 rounded-xl py-2.5 pl-9 pr-3 text-sm text-white font-mono focus:border-amber-400 outline-none"
                       />
                     </div>
                   </div>
 
-                  <button
-                    type="submit"
-                    disabled={isLoading}
-                    className="w-full py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-sm shadow transition cursor-pointer"
-                  >
-                    {isLoading ? 'Verifying Account...' : 'Continue to Security Question'}
-                  </button>
-                </form>
-              )}
-
-              {/* Step 2: Answer Security Question & Reset Password */}
-              {forgotStep === 'QUESTION' && (
-                <form onSubmit={handleResetWithQuestionSubmit} className="space-y-3.5">
-                  <div className="p-3.5 rounded-xl bg-slate-950 border border-amber-500/30 text-xs text-slate-300 space-y-1.5">
-                    <div className="text-[10px] uppercase font-bold text-amber-400">
-                      Security Question:
-                    </div>
-                    <div className="text-sm font-black text-white leading-snug">
-                      "{forgotSecurityQuestion}"
+                  {/* 1. SELECT SECURITY QUESTION */}
+                  <div>
+                    <label className="block text-xs font-bold text-amber-400 mb-1">
+                      Select Security Question: *
+                    </label>
+                    <div className="relative">
+                      <select
+                        value={forgotSecurityQuestion}
+                        onChange={(e) => setForgotSecurityQuestion(e.target.value)}
+                        className="w-full bg-slate-950 border border-amber-500/50 rounded-xl py-2.5 px-3 text-xs sm:text-sm text-white font-medium focus:border-amber-400 outline-none appearance-none cursor-pointer"
+                      >
+                        {SECURITY_QUESTIONS.map((q, idx) => (
+                          <option key={idx} value={q} className="bg-slate-900 text-white">
+                            {q}
+                          </option>
+                        ))}
+                      </select>
+                      <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-amber-400">
+                        <HelpCircle className="w-4 h-4" />
+                      </div>
                     </div>
                   </div>
 
+                  {/* 2. SECURITY ANSWER (IN THE BOX BELOW) */}
                   <div>
                     <div className="flex items-center justify-between mb-1">
                       <label className="text-xs font-bold text-slate-300">
@@ -801,11 +791,12 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                         type="button"
                         onClick={() => {
                           setError(null);
+                          setSuccessMsg(null);
                           setForgotStep('RECOVER_NID');
                         }}
-                        className="text-[11px] text-amber-400 hover:underline font-semibold cursor-pointer"
+                        className="text-[11px] text-amber-400 hover:text-amber-300 hover:underline font-bold cursor-pointer"
                       >
-                        Forgot Security Answer?
+                        Forgot Question / Answer?
                       </button>
                     </div>
                     <input
@@ -813,11 +804,12 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                       required
                       value={forgotSecurityAnswer}
                       onChange={(e) => setForgotSecurityAnswer(e.target.value)}
-                      placeholder="Enter security answer"
+                      placeholder="Type your answer here"
                       className="w-full bg-slate-950 border border-slate-700 rounded-xl py-2 px-3 text-sm text-white focus:border-amber-400 outline-none"
                     />
                   </div>
 
+                  {/* New Password */}
                   <div>
                     <label className="block text-xs font-bold text-slate-300 mb-1">
                       New Password: *
@@ -832,6 +824,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                     />
                   </div>
 
+                  {/* Confirm New Password */}
                   <div>
                     <label className="block text-xs font-bold text-slate-300 mb-1">
                       Confirm New Password: *
@@ -846,57 +839,62 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                     />
                   </div>
 
+                  {/* Submit Button */}
                   <button
                     type="submit"
                     disabled={isLoading}
-                    className="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-sm shadow transition cursor-pointer"
+                    className="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-sm shadow-lg shadow-emerald-950/40 transition transform active:scale-98 cursor-pointer flex items-center justify-center gap-2"
                   >
-                    {isLoading ? 'Updating Password...' : 'Save New Password & Sign In'}
+                    {isLoading ? 'Updating Password...' : 'Reset Password & Sign In'}
                   </button>
 
-                  <div className="flex items-center justify-between pt-1 text-xs">
+                  {/* Forgot Security Question Option Button */}
+                  <div className="pt-2 text-center border-t border-slate-800/80">
                     <button
                       type="button"
-                      onClick={() => setForgotStep('PHONE')}
-                      className="text-slate-500 hover:text-slate-300 cursor-pointer"
+                      onClick={() => {
+                        setError(null);
+                        setSuccessMsg(null);
+                        setForgotStep('RECOVER_NID');
+                      }}
+                      className="inline-flex items-center gap-1.5 text-xs text-amber-400 hover:text-amber-300 font-bold hover:underline cursor-pointer"
                     >
-                      ← Change Phone
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setForgotStep('RECOVER_NID')}
-                      className="text-amber-400 hover:underline font-bold cursor-pointer"
-                    >
-                      Recover via NID & SMS →
+                      <HelpCircle className="w-3.5 h-3.5" />
+                      <span>Forgot Security Question? Recover via NID & Phone</span>
                     </button>
                   </div>
                 </form>
               )}
 
-              {/* Step 3: Recover via NID + Phone Number */}
+              {/* View 2: Recover Security Question via NID + Phone */}
               {forgotStep === 'RECOVER_NID' && (
                 <form onSubmit={handleRecoverViaNidSubmit} className="space-y-3.5">
-                  <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-300 leading-relaxed">
-                    Forgot your security question or answer? Enter your registered Phone Number and National ID (NID). If they match our records, an SMS will be dispatched to your phone containing your security question and answer.
+                  <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-300 leading-relaxed">
+                    Forgot your security question? Enter your registered Phone Number and National ID (NID). If they match our records, an SMS will be dispatched to your phone containing your registered security question and answer.
                   </div>
 
                   <div>
                     <label className="block text-xs font-bold text-slate-300 mb-1">
                       Registered Phone Number: *
                     </label>
-                    <input
-                      type="tel"
-                      required
-                      value={forgotPhone}
-                      onChange={(e) => setForgotPhone(e.target.value)}
-                      placeholder="e.g. 01712345678"
-                      className="w-full bg-slate-950 border border-slate-700 rounded-xl py-2 px-3 text-sm text-white font-mono focus:border-amber-400 outline-none"
-                    />
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-500">
+                        <Phone className="w-4 h-4" />
+                      </div>
+                      <input
+                        type="tel"
+                        required
+                        value={forgotPhone}
+                        onChange={(e) => setForgotPhone(e.target.value)}
+                        placeholder="e.g. 01883239867"
+                        className="w-full bg-slate-950 border border-slate-700 rounded-xl py-2 pl-9 pr-3 text-sm text-white font-mono focus:border-amber-400 outline-none"
+                      />
+                    </div>
                   </div>
 
                   <div>
                     <label className="block text-xs font-bold text-slate-300 mb-1">
-                      Registered NID Number: *
+                      Registered National ID (NID) Number: *
                     </label>
                     <input
                       type="text"
@@ -918,10 +916,14 @@ export const AuthPage: React.FC<AuthPageProps> = ({
 
                   <button
                     type="button"
-                    onClick={() => setForgotStep('QUESTION')}
-                    className="w-full text-center text-xs text-slate-500 hover:text-slate-300 cursor-pointer pt-1"
+                    onClick={() => {
+                      setError(null);
+                      setSuccessMsg(null);
+                      setForgotStep('RESET_FORM');
+                    }}
+                    className="w-full text-center text-xs text-slate-400 hover:text-white cursor-pointer pt-1"
                   >
-                    ← Back to Security Question
+                    ← Back to Password Reset Form
                   </button>
                 </form>
               )}
