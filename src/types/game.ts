@@ -144,10 +144,12 @@ export interface BonusConfig {
   referralMilestone50USD: number;
   referralMilestone100USD: number;
   festivalBonusEnabled: boolean;
+  festivalBonusMode?: 'FIXED_CASH' | 'DEPOSIT_PERCENT';
   festivalBonusId: string;
   festivalBonusTitle: string;
   festivalBonusDescription: string;
   festivalBonusAmountUSD: number;
+  festivalBonusPercent?: number;
   customPromoText?: string;
 }
 

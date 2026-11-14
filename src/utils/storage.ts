@@ -24,10 +24,12 @@ export const DEFAULT_BONUS_CONFIG: BonusConfig = {
   referralMilestone50USD: 5.00,
   referralMilestone100USD: 10.00,
   festivalBonusEnabled: false,
+  festivalBonusMode: 'FIXED_CASH',
   festivalBonusId: 'fest_special_1',
   festivalBonusTitle: 'Eid / Puja Special Festival Offer',
   festivalBonusDescription: 'Celebrating the festive season with Shapla Poribar! Claim this special occasion bonus credit and enjoy your predictions.',
   festivalBonusAmountUSD: 2.00,
+  festivalBonusPercent: 15,
   customPromoText: '',
 };
 

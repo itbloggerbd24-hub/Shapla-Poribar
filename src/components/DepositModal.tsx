@@ -264,9 +264,39 @@ export const DepositModal: React.FC<DepositModalProps> = ({
               {adminSettings.bonusConfig?.bonusesEnabled !== false && adminSettings.bonusConfig?.depositBonusEnabled && Number(adminSettings.bonusConfig?.depositBonusPercent || 0) > 0
                 ? ` • +${adminSettings.bonusConfig.depositBonusPercent}% Deposit Promo Active!`
                 : ''}
+              {adminSettings.bonusConfig?.bonusesEnabled !== false && adminSettings.bonusConfig?.festivalBonusEnabled && adminSettings.bonusConfig?.festivalBonusMode === 'DEPOSIT_PERCENT' && Number(adminSettings.bonusConfig?.festivalBonusPercent || 0) > 0
+                ? ` • 🎉 +${adminSettings.bonusConfig.festivalBonusPercent}% ${adminSettings.bonusConfig.festivalBonusTitle || 'Festival Bonus'}!`
+                : ''}
             </p>
           </div>
         </div>
+
+        {/* Active Festival Deposit % Offer Banner */}
+        {adminSettings.bonusConfig?.bonusesEnabled !== false &&
+         adminSettings.bonusConfig?.festivalBonusEnabled &&
+         adminSettings.bonusConfig?.festivalBonusMode === 'DEPOSIT_PERCENT' &&
+         Number(adminSettings.bonusConfig?.festivalBonusPercent || 0) > 0 && (
+          <div className="mt-4 p-3.5 rounded-2xl bg-gradient-to-r from-fuchsia-500/20 via-amber-500/15 to-slate-950 border border-fuchsia-400/50 flex items-start gap-3 shadow-md">
+            <div className="w-8 h-8 rounded-xl bg-fuchsia-500/20 text-fuchsia-300 flex items-center justify-center shrink-0 mt-0.5">
+              <Sparkles className="w-4 h-4" />
+            </div>
+            <div className="text-xs flex-1">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <span className="font-black text-fuchsia-200">
+                  {adminSettings.bonusConfig.festivalBonusTitle || 'Special Festival Deposit Offer'}
+                </span>
+                <span className="px-2 py-0.5 rounded-full bg-amber-400 text-slate-950 font-black text-[10px]">
+                  +{adminSettings.bonusConfig.festivalBonusPercent}% EXTRA BONUS
+                </span>
+              </div>
+              {adminSettings.bonusConfig.festivalBonusDescription && (
+                <p className="text-slate-200 text-[11px] mt-1 leading-relaxed">
+                  {adminSettings.bonusConfig.festivalBonusDescription}
+                </p>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Deposit Methods Tab Switcher */}
         <div className="grid grid-cols-2 gap-2 mt-4 p-1 rounded-2xl bg-slate-950 border border-slate-800">

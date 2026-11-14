@@ -396,6 +396,9 @@ export default function App() {
     }
 
     const bonusCfg = { ...DEFAULT_BONUS_CONFIG, ...(adminSettings.bonusConfig || {}) };
+    if (bonusCfg.festivalBonusMode === 'DEPOSIT_PERCENT') {
+      return;
+    }
     const festivalAmt = Number(bonusCfg.festivalBonusAmountUSD ?? 0);
     if (!bonusCfg.bonusesEnabled || !bonusCfg.festivalBonusEnabled || festivalAmt <= 0) {
       return;

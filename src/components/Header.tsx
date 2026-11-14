@@ -78,8 +78,14 @@ export const Header: React.FC<HeaderProps> = ({
   const refBonus = Number(bonusCfg.referralBonusUSD ?? 0.50);
   const weeklyBonus = Number(bonusCfg.weeklyBonusUSD ?? 0.50);
   const monthlyBonus = Number(bonusCfg.monthlyBonusUSD ?? 1.00);
+  const isFestivalDepositPct = bonusCfg.festivalBonusMode === 'DEPOSIT_PERCENT';
   const festivalBonus = Number(bonusCfg.festivalBonusAmountUSD ?? 0);
-  const isFestivalActive = Boolean(bonusCfg.bonusesEnabled && bonusCfg.festivalBonusEnabled && festivalBonus > 0);
+  const festivalPct = Number(bonusCfg.festivalBonusPercent ?? 0);
+  const isFestivalActive = Boolean(
+    bonusCfg.bonusesEnabled &&
+    bonusCfg.festivalBonusEnabled &&
+    (isFestivalDepositPct ? festivalPct > 0 : festivalBonus > 0)
+  );
 
   return (
     <>
@@ -246,7 +252,7 @@ export const Header: React.FC<HeaderProps> = ({
                     ? 'bg-gradient-to-r from-fuchsia-500/20 to-amber-500/20 hover:bg-fuchsia-500/30 border-fuchsia-400/50 text-fuchsia-200'
                     : 'bg-gradient-to-r from-emerald-500/10 to-teal-500/10 hover:bg-emerald-500/20 border-emerald-500/30 text-emerald-300'
                 }`}
-                title={`Claim Free Weekly ($${weeklyBonus.toFixed(2)}), Monthly ($${monthlyBonus.toFixed(2)})${isFestivalActive ? `, & Special Festival ($${festivalBonus.toFixed(2)})` : ''} Bonus`}
+                title={`Claim Free Weekly ($${weeklyBonus.toFixed(2)}), Monthly ($${monthlyBonus.toFixed(2)})${isFestivalActive ? `, & Special Festival (${isFestivalDepositPct ? `+${festivalPct}%` : `$${festivalBonus.toFixed(2)}`})` : ''} Bonus`}
               >
                 <Sparkles className={`w-3.5 h-3.5 ${isFestivalActive ? 'text-fuchsia-300 animate-pulse' : 'text-emerald-400'}`} />
                 <span>{isFestivalActive ? 'Rewards & Festival Offer' : 'Weekly/Monthly Bonus'}</span>
@@ -564,7 +570,7 @@ export const Header: React.FC<HeaderProps> = ({
                         ? 'bg-fuchsia-500/25 text-fuchsia-200'
                         : 'bg-emerald-500/10 text-emerald-300'
                     }`}>
-                      {isFestivalActive ? `+$${festivalBonus.toFixed(2)}` : 'Claim'}
+                      {isFestivalActive ? (isFestivalDepositPct ? `+${festivalPct}%` : `+$${festivalBonus.toFixed(2)}`) : 'Claim'}
                     </span>
                   </button>
                 )}

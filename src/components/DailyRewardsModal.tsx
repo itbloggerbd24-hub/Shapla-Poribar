@@ -60,12 +60,14 @@ export const DailyRewardsModal: React.FC<DailyRewardsModalProps> = ({
   const weeklyAmt = Number(bonusCfg.weeklyBonusUSD ?? 0.50);
   const monthlyAmt = Number(bonusCfg.monthlyBonusUSD ?? 1.00);
   const welcomeAmt = Number(bonusCfg.welcomeBonusUSD ?? 1.00);
+  const isFestivalDepositPct = bonusCfg.festivalBonusMode === 'DEPOSIT_PERCENT';
   const festivalAmt = Number(bonusCfg.festivalBonusAmountUSD ?? 0);
+  const festivalPct = Number(bonusCfg.festivalBonusPercent ?? 0);
   const minDepAmt = Number(bonusCfg.minDepositForBonusUSD ?? adminSettings?.minDepositUSD ?? 5.00);
 
   const isWeeklyActive = bonusCfg.bonusesEnabled && bonusCfg.weeklyBonusEnabled && weeklyAmt > 0;
   const isMonthlyActive = bonusCfg.bonusesEnabled && bonusCfg.monthlyBonusEnabled && monthlyAmt > 0;
-  const isFestivalActive = bonusCfg.bonusesEnabled && bonusCfg.festivalBonusEnabled && festivalAmt > 0;
+  const isFestivalActive = bonusCfg.bonusesEnabled && bonusCfg.festivalBonusEnabled && (isFestivalDepositPct ? festivalPct > 0 : festivalAmt > 0);
 
   const festivalId = bonusCfg.festivalBonusId || 'fest_special_1';
   const isFestivalAlreadyClaimed = Boolean(
@@ -224,7 +226,9 @@ export const DailyRewardsModal: React.FC<DailyRewardsModalProps> = ({
           {/* Special Festival / Occasion Offer Card (Eid, Puja, Holidays) */}
           {isFestivalActive && (
             <div className={`p-4 rounded-2xl border transition ${
-              !isDepositUnlocked
+              isFestivalDepositPct
+                ? 'bg-gradient-to-br from-amber-500/20 via-fuchsia-500/10 to-slate-950 border-amber-400/70 shadow-xl ring-1 ring-amber-400/30'
+                : !isDepositUnlocked
                 ? 'bg-gradient-to-br from-fuchsia-950/30 via-slate-950 to-slate-950 border-fuchsia-500/30 opacity-95'
                 : festivalEligible
                 ? 'bg-gradient-to-br from-fuchsia-500/20 via-amber-500/10 to-slate-950 border-fuchsia-400/70 shadow-xl ring-1 ring-fuchsia-400/40'
@@ -243,17 +247,21 @@ export const DailyRewardsModal: React.FC<DailyRewardsModalProps> = ({
                       <span className="px-1.5 py-0.5 rounded-md bg-gradient-to-r from-fuchsia-500 to-amber-400 text-slate-950 text-[9px] font-black uppercase">
                         FESTIVAL OFFER
                       </span>
-                      {!isDepositUnlocked && (
+                      {!isFestivalDepositPct && !isDepositUnlocked && (
                         <span className="px-1.5 py-0.5 rounded-md bg-rose-500/20 text-rose-300 text-[9px] font-bold flex items-center gap-0.5">
                           <Lock className="w-2.5 h-2.5" /> Locked
                         </span>
                       )}
                     </div>
-                    <span className="text-[10px] text-fuchsia-300">Limited-time special occasion offer (1 claim per event)</span>
+                    <span className="text-[10px] text-fuchsia-300">
+                      {isFestivalDepositPct
+                        ? `Automatic +${festivalPct}% extra bonus on every qualifying deposit (min $${minDepAmt.toFixed(2)})`
+                        : 'Limited-time special occasion offer (1 claim per event)'}
+                    </span>
                   </div>
                 </div>
                 <div className="text-base font-black text-fuchsia-300 font-mono shrink-0">
-                  +${festivalAmt.toFixed(2)} USD
+                  {isFestivalDepositPct ? `+${festivalPct}% BONUS` : `+$${festivalAmt.toFixed(2)} USD`}
                 </div>
               </div>
 
@@ -261,7 +269,20 @@ export const DailyRewardsModal: React.FC<DailyRewardsModalProps> = ({
                 {bonusCfg.festivalBonusDescription || 'Celebrate this special occasion with an exclusive bonus reward!'}
               </p>
 
-              {!isDepositUnlocked ? (
+              {isFestivalDepositPct ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onOpenDeposit?.();
+                  }}
+                  className="w-full py-2.5 rounded-xl bg-gradient-to-r from-amber-400 via-yellow-400 to-fuchsia-500 hover:from-amber-300 hover:to-fuchsia-400 text-slate-950 font-black text-xs shadow-lg transition transform active:scale-98 cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  <Sparkles className="w-4 h-4 text-slate-950" />
+                  <span>Deposit Now & Get +{festivalPct}% Festival Bonus</span>
+                  <ArrowRight className="w-3.5 h-3.5 text-slate-950" />
+                </button>
+              ) : !isDepositUnlocked ? (
                 <button
                   type="button"
                   onClick={() => {

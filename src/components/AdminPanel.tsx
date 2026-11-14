@@ -224,6 +224,23 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setTimeout(() => setSettingsSaved(false), 2500);
   };
 
+  const buildFestivalNotifPayload = (cfg: BonusConfig) => {
+    const titleText = cfg.festivalBonusTitle?.trim() || 'Special Festival Bonus Offer';
+    const descText = cfg.festivalBonusDescription?.trim() || 'Celebrate this special occasion with an exclusive bonus reward!';
+    if (cfg.festivalBonusMode === 'DEPOSIT_PERCENT') {
+      const pct = Number(cfg.festivalBonusPercent || 0);
+      return {
+        title: `🎉 ${titleText} (+${pct}% Deposit Bonus)`,
+        message: `${descText}\n\nOffer: +${pct}% Extra Bonus on Qualifying Deposits • Deposit now to receive this special festival reward!`,
+      };
+    }
+    const amtText = Number(cfg.festivalBonusAmountUSD || 0).toFixed(2);
+    return {
+      title: `🎉 ${titleText} (+$${amtText} USD)`,
+      message: `${descText}\n\nOffer Amount: +$${amtText} USD • Open the Reward Center to claim this special occasion bonus!`,
+    };
+  };
+
   const handleSaveBonusOffers = async (e: React.FormEvent) => {
     e.preventDefault();
     const wasFestivalOn = Boolean(settings.bonusConfig?.festivalBonusEnabled);
@@ -231,15 +248,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     await onUpdateSettings(editableSettings);
     if (!wasFestivalOn && isNowFestivalOn && onPublishNotice) {
       const cfg = { ...DEFAULT_BONUS_CONFIG, ...(editableSettings.bonusConfig || {}) };
-      const titleText = cfg.festivalBonusTitle?.trim() || 'Special Festival Bonus Offer';
-      const descText = cfg.festivalBonusDescription?.trim() || 'Celebrate this special occasion with an exclusive bonus reward!';
-      const amtText = Number(cfg.festivalBonusAmountUSD || 0).toFixed(2);
-      await onPublishNotice(
-        `🎉 ${titleText} (+$${amtText} USD)`,
-        `${descText}\n\nOffer Amount: +$${amtText} USD • Open the Reward Center to claim this special occasion bonus!`,
-        'FESTIVAL OFFER',
-        'FESTIVAL_BONUS'
-      );
+      const payload = buildFestivalNotifPayload(cfg);
+      await onPublishNotice(payload.title, payload.message, 'FESTIVAL OFFER', 'FESTIVAL_BONUS');
       setFestivalNoticeSent(true);
     }
     setBonusesSaved(true);
@@ -257,7 +267,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   };
 
   const handleSaveAndBroadcastFestival = async () => {
-    const cfg = {
+    const cfg: BonusConfig = {
       ...DEFAULT_BONUS_CONFIG,
       ...(editableSettings.bonusConfig || {}),
       festivalBonusEnabled: true,
@@ -269,15 +279,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setEditableSettings(nextSettings);
     await onUpdateSettings(nextSettings);
     if (onPublishNotice) {
-      const titleText = cfg.festivalBonusTitle?.trim() || 'Special Festival Bonus Offer';
-      const descText = cfg.festivalBonusDescription?.trim() || 'Celebrate this special occasion with an exclusive bonus reward!';
-      const amtText = Number(cfg.festivalBonusAmountUSD || 0).toFixed(2);
-      await onPublishNotice(
-        `🎉 ${titleText} (+$${amtText} USD)`,
-        `${descText}\n\nOffer Amount: +$${amtText} USD • Open the Reward Center to claim this special occasion bonus!`,
-        'FESTIVAL OFFER',
-        'FESTIVAL_BONUS'
-      );
+      const payload = buildFestivalNotifPayload(cfg);
+      await onPublishNotice(payload.title, payload.message, 'FESTIVAL OFFER', 'FESTIVAL_BONUS');
     }
     setBonusesSaved(true);
     setFestivalNoticeSent(true);
@@ -1343,6 +1346,60 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               </div>
             </div>
 
+            {/* Offer Mode Selector: Fixed Cash ($) vs Deposit Percentage (%) */}
+            <div>
+              <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
+                Choose Festival Offer Type:
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => updateBonusField('festivalBonusMode', 'FIXED_CASH')}
+                  className={`p-3 rounded-xl border text-left transition cursor-pointer flex items-center justify-between gap-2 ${
+                    (bonusCfg.festivalBonusMode || 'FIXED_CASH') === 'FIXED_CASH'
+                      ? 'bg-fuchsia-500/20 border-fuchsia-400 text-white shadow'
+                      : 'bg-slate-950/70 border-slate-800 text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <div>
+                    <div className="text-xs font-black flex items-center gap-1.5">
+                      <Gift className="w-3.5 h-3.5 text-fuchsia-400" />
+                      <span>Fixed Cash Bonus ($ USD)</span>
+                    </div>
+                    <div className="text-[10px] text-slate-300 mt-0.5">
+                      Players claim fixed $ gift once in Reward Center
+                    </div>
+                  </div>
+                  <span className="text-xs font-mono font-black text-fuchsia-300">
+                    ${Number(bonusCfg.festivalBonusAmountUSD || 0).toFixed(2)}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => updateBonusField('festivalBonusMode', 'DEPOSIT_PERCENT')}
+                  className={`p-3 rounded-xl border text-left transition cursor-pointer flex items-center justify-between gap-2 ${
+                    bonusCfg.festivalBonusMode === 'DEPOSIT_PERCENT'
+                      ? 'bg-amber-500/20 border-amber-400 text-white shadow'
+                      : 'bg-slate-950/70 border-slate-800 text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <div>
+                    <div className="text-xs font-black flex items-center gap-1.5">
+                      <DollarSign className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Deposit Percentage Offer (%)</span>
+                    </div>
+                    <div className="text-[10px] text-slate-300 mt-0.5">
+                      Extra % bonus credited automatically on approved deposits
+                    </div>
+                  </div>
+                  <span className="text-xs font-mono font-black text-amber-300">
+                    +{Number(bonusCfg.festivalBonusPercent || 0)}%
+                  </span>
+                </button>
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div className="md:col-span-2">
                 <label className="block text-[11px] font-bold text-slate-300 mb-1">
@@ -1357,19 +1414,36 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 />
               </div>
 
-              <div>
-                <label className="block text-[11px] font-bold text-slate-300 mb-1">
-                  Special Bonus Amount ($ USD):
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.25"
-                  value={bonusCfg.festivalBonusAmountUSD}
-                  onChange={(e) => updateBonusField('festivalBonusAmountUSD', Math.max(0, Number(e.target.value)))}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl py-2 px-3 text-sm text-fuchsia-300 font-mono font-bold focus:border-fuchsia-400 outline-none"
-                />
-              </div>
+              {bonusCfg.festivalBonusMode === 'DEPOSIT_PERCENT' ? (
+                <div>
+                  <label className="block text-[11px] font-bold text-amber-300 mb-1">
+                    Festival Deposit Bonus (%):
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="200"
+                    step="1"
+                    value={bonusCfg.festivalBonusPercent ?? 15}
+                    onChange={(e) => updateBonusField('festivalBonusPercent', Math.max(0, Math.min(200, Number(e.target.value))))}
+                    className="w-full bg-slate-950 border border-amber-500/50 rounded-xl py-2 px-3 text-sm text-amber-300 font-mono font-bold focus:border-amber-400 outline-none"
+                  />
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                    Special Bonus Amount ($ USD):
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.25"
+                    value={bonusCfg.festivalBonusAmountUSD}
+                    onChange={(e) => updateBonusField('festivalBonusAmountUSD', Math.max(0, Number(e.target.value)))}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl py-2 px-3 text-sm text-fuchsia-300 font-mono font-bold focus:border-fuchsia-400 outline-none"
+                  />
+                </div>
+              )}
             </div>
 
             <div>
@@ -1387,18 +1461,26 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1">
               <div className="flex items-center gap-2 flex-wrap">
-                <button
-                  type="button"
-                  onClick={() => updateBonusField('festivalBonusId', `fest_${Date.now()}`)}
-                  className="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 hover:text-white font-bold text-[11px] flex items-center gap-1.5 transition cursor-pointer"
-                  title="Generate a new campaign ID so players who claimed a previous festival offer can claim this new festival offer"
-                >
-                  <RotateCcw className="w-3 h-3 text-fuchsia-400" />
-                  <span>Start New Festival Round (Allow Re-claim)</span>
-                </button>
-                <span className="text-[10px] font-mono text-slate-500">
-                  ID: {bonusCfg.festivalBonusId || 'fest_special_1'}
-                </span>
+                {(bonusCfg.festivalBonusMode || 'FIXED_CASH') === 'FIXED_CASH' ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => updateBonusField('festivalBonusId', `fest_${Date.now()}`)}
+                      className="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 hover:text-white font-bold text-[11px] flex items-center gap-1.5 transition cursor-pointer"
+                      title="Generate a new campaign ID so players who claimed a previous festival offer can claim this new festival offer"
+                    >
+                      <RotateCcw className="w-3 h-3 text-fuchsia-400" />
+                      <span>Start New Festival Round (Allow Re-claim)</span>
+                    </button>
+                    <span className="text-[10px] font-mono text-slate-500">
+                      ID: {bonusCfg.festivalBonusId || 'fest_special_1'}
+                    </span>
+                  </>
+                ) : (
+                  <span className="text-[11px] text-amber-300 font-semibold">
+                    Applies +{Number(bonusCfg.festivalBonusPercent || 0)}% automatically on every deposit ≥ ${Number(bonusCfg.minDepositForBonusUSD || 5).toFixed(2)} USD while active.
+                  </span>
+                )}
               </div>
 
               <div className="flex items-center gap-2">

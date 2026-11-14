@@ -152,10 +152,12 @@ async function startServer() {
     referralMilestone50USD: 5.00,
     referralMilestone100USD: 10.00,
     festivalBonusEnabled: false,
+    festivalBonusMode: 'FIXED_CASH',
     festivalBonusId: 'fest_special_1',
     festivalBonusTitle: 'Eid / Puja Special Festival Offer',
     festivalBonusDescription: 'Celebrating the festive season with Shapla Poribar! Claim this special occasion bonus credit and enjoy your predictions.',
     festivalBonusAmountUSD: 2.00,
+    festivalBonusPercent: 15,
     customPromoText: '',
   };
 
@@ -865,8 +867,14 @@ async function startServer() {
         bonusAmount = Number(Number(bonusCfg.monthlyBonusUSD).toFixed(2));
         db.users[userIndex].lastMonthlyClaim = now;
       } else if (type === 'festival') {
-        if (!bonusCfg.festivalBonusEnabled || Number(bonusCfg.festivalBonusAmountUSD) <= 0) {
+        if (!bonusCfg.festivalBonusEnabled) {
           return res.status(400).json({ error: 'Special festival bonus offer is currently not active.' });
+        }
+        if ((bonusCfg.festivalBonusMode || 'FIXED_CASH') === 'DEPOSIT_PERCENT') {
+          return res.status(400).json({ error: `This festival offer automatically credits +${Number(bonusCfg.festivalBonusPercent || 0)}% extra on qualifying deposits.` });
+        }
+        if (Number(bonusCfg.festivalBonusAmountUSD) <= 0) {
+          return res.status(400).json({ error: 'Special festival bonus amount is currently $0.00.' });
         }
         const festivalId = bonusCfg.festivalBonusId || 'fest_special_1';
         const claimedIds = Array.isArray(user.claimedFestivalBonusIds) ? user.claimedFestivalBonusIds : [];
@@ -933,7 +941,7 @@ async function startServer() {
 
     if (!db.notifications) db.notifications = [];
 
-    // Optional % deposit promo bonus on eligible deposits (first or recurring)
+    // Optional % deposit promo bonus & active Festival Deposit % offer on eligible deposits
     let depositPctBonus = 0;
     if (
       bonusCfg.bonusesEnabled &&
@@ -945,6 +953,21 @@ async function startServer() {
       if (depositPctBonus > 0) {
         creditAmount += depositPctBonus;
         totalLockedBonusAdded += depositPctBonus;
+      }
+    }
+
+    let festivalPctBonus = 0;
+    if (
+      bonusCfg.bonusesEnabled &&
+      bonusCfg.festivalBonusEnabled &&
+      bonusCfg.festivalBonusMode === 'DEPOSIT_PERCENT' &&
+      Number(bonusCfg.festivalBonusPercent) > 0 &&
+      deposit.amountUSD >= minDep
+    ) {
+      festivalPctBonus = Number((deposit.amountUSD * (Number(bonusCfg.festivalBonusPercent) / 100)).toFixed(2));
+      if (festivalPctBonus > 0) {
+        creditAmount += festivalPctBonus;
+        totalLockedBonusAdded += festivalPctBonus;
       }
     }
 
@@ -981,17 +1004,19 @@ async function startServer() {
       }
 
       // Add notification for the newly deposited user
-      if (welcomeBonus > 0 || depositPctBonus > 0) {
+      const totalFirstDepBonus = Number((welcomeBonus + depositPctBonus + festivalPctBonus).toFixed(2));
+      if (totalFirstDepBonus > 0) {
         const bonusParts = [];
         if (welcomeBonus > 0) bonusParts.push(`$${welcomeBonus.toFixed(2)} welcome signup bonus`);
         if (depositPctBonus > 0) bonusParts.push(`$${depositPctBonus.toFixed(2)} (${bonusCfg.depositBonusPercent}%) deposit promo bonus`);
+        if (festivalPctBonus > 0) bonusParts.push(`$${festivalPctBonus.toFixed(2)} (${bonusCfg.festivalBonusTitle || 'Festival Offer'} ${bonusCfg.festivalBonusPercent}%)`);
         db.notifications.unshift({
           id: `notif_${Date.now()}_first_dep_${user.id}`,
           userId: user.id,
-          title: `🎁 1st Deposit & $${(welcomeBonus + depositPctBonus).toFixed(2)} Bonus!`,
+          title: `🎁 1st Deposit & $${totalFirstDepBonus.toFixed(2)} Bonus!`,
           message: `Your deposit of $${deposit.amountUSD.toFixed(2)} was successful! A ${bonusParts.join(' + ')} has been credited to your wallet!`,
-          type: 'SIGNUP_BONUS',
-          badge: 'BONUS',
+          type: festivalPctBonus > 0 ? 'FESTIVAL_BONUS' : 'SIGNUP_BONUS',
+          badge: festivalPctBonus > 0 ? 'FESTIVAL OFFER' : 'BONUS',
           isRead: false,
           createdAt: Date.now(),
         });
@@ -1073,15 +1098,19 @@ async function startServer() {
         }
       }
     } else {
-      // Regular deposit approved notification (plus optional deposit % promo bonus)
-      if (depositPctBonus > 0) {
+      // Regular deposit approved notification (plus optional deposit % promo & festival % bonus)
+      const totalPromoPctBonus = Number((depositPctBonus + festivalPctBonus).toFixed(2));
+      if (totalPromoPctBonus > 0) {
+        const parts = [];
+        if (depositPctBonus > 0) parts.push(`$${depositPctBonus.toFixed(2)} (${bonusCfg.depositBonusPercent}% deposit promo)`);
+        if (festivalPctBonus > 0) parts.push(`$${festivalPctBonus.toFixed(2)} (${bonusCfg.festivalBonusTitle || 'Festival Offer'} ${bonusCfg.festivalBonusPercent}%)`);
         db.notifications.unshift({
           id: `notif_${Date.now()}_dep_${deposit.id}`,
           userId: user.id,
-          title: `✅ Deposit & +$${depositPctBonus.toFixed(2)} Promo Bonus!`,
-          message: `Your deposit of $${deposit.amountUSD.toFixed(2)} + $${depositPctBonus.toFixed(2)} (${bonusCfg.depositBonusPercent}% deposit bonus) has been credited to your wallet!`,
-          type: 'DEPOSIT_APPROVED',
-          badge: 'BONUS',
+          title: `✅ Deposit & +$${totalPromoPctBonus.toFixed(2)} ${festivalPctBonus > 0 ? 'Festival Bonus' : 'Promo Bonus'}!`,
+          message: `Your deposit of $${deposit.amountUSD.toFixed(2)} + ${parts.join(' + ')} has been credited to your wallet!`,
+          type: festivalPctBonus > 0 ? 'FESTIVAL_BONUS' : 'DEPOSIT_APPROVED',
+          badge: festivalPctBonus > 0 ? 'FESTIVAL OFFER' : 'BONUS',
           isRead: false,
           createdAt: Date.now(),
         });
@@ -1115,6 +1144,7 @@ async function startServer() {
 
       if (!db.deposits) db.deposits = [];
 
+      const shouldAutoApprove = depositData.status === 'APPROVED';
       const newDeposit = {
         id: depositData.id || `DEP-${Math.floor(1000 + Math.random() * 9000)}`,
         userId: depositData.userId,
@@ -1127,7 +1157,7 @@ async function startServer() {
         network: depositData.network,
         screenshotUrl: depositData.screenshotUrl,
         userNote: depositData.userNote || '',
-        status: depositData.status || 'PENDING',
+        status: shouldAutoApprove ? 'PENDING' : (depositData.status || 'PENDING'),
         aiVerified: Boolean(depositData.aiVerified),
         aiReason: depositData.aiReason,
         createdAt: depositData.createdAt || Date.now(),
@@ -1137,7 +1167,7 @@ async function startServer() {
       let updatedUser = null;
 
       // If automatically approved, trigger balance & bonuses
-      if (newDeposit.status === 'APPROVED') {
+      if (shouldAutoApprove) {
         updatedUser = approveDepositAndTriggerBonuses(db, newDeposit);
       }
 
