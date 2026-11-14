@@ -1,5 +1,16 @@
 import { UserProfile } from '../types/game';
-import { loadFromStorage, saveToStorage } from './storage';
+import {
+  normalizePhone,
+  isPhoneMatch,
+  isUserMatch,
+  getVaultUsersSync,
+  getVaultUsersAsync,
+  saveUserToVault,
+  mergeServerUsersIntoVault,
+  findVaultUser,
+} from './accountVault';
+
+export { normalizePhone, isPhoneMatch };
 
 const API_BASE = '/api';
 
@@ -11,67 +22,17 @@ export interface AuthResponse {
   message?: string;
 }
 
-// Local cache helper
-const getLocalUsers = (): UserProfile[] => {
-  return loadFromStorage<UserProfile[]>('all_users_usd', [
-    {
-      id: 'usr_player_1',
-      name: 'Alex Hunter',
-      phone: '01712345678',
-      password: '123456',
-      walletBalance: 25.00,
-      frozenWithdrawal: 0,
-      totalWon: 0,
-      totalLost: 0,
-      role: 'USER',
-      binancePayId: '749102381',
-      binanceAddress: '0xd1194126385ab996d60542f54e5d8f1372a4cc3e',
-      isSuspended: false,
-      createdAt: Date.now() - 86400000 * 5,
-    },
-    {
-      id: 'usr_admin',
-      name: 'Super Admin',
-      phone: '01899999999',
-      password: 't$5yB1qu4mEa3gR',
-      walletBalance: 15000.00,
-      frozenWithdrawal: 0,
-      totalWon: 0,
-      totalLost: 0,
-      role: 'ADMIN',
-      binancePayId: '1156528658',
-      binanceAddress: '0xd1194126385ab996d60542f54e5d8f1372a4cc3e',
-      isSuspended: false,
-      createdAt: Date.now() - 86400000 * 30,
-    }
-  ]);
-};
-
-const saveLocalUsers = (users: UserProfile[]) => {
-  saveToStorage('all_users_usd', users);
-};
-
-export const normalizePhone = (phone: string): string => {
-  if (!phone) return '';
-  let digits = String(phone).replace(/\D/g, '');
-  if (digits.startsWith('880') && digits.length >= 13) {
-    digits = digits.slice(2);
-  } else if (digits.startsWith('88') && digits.length >= 13) {
-    digits = digits.slice(2);
+const syncUserToServer = async (user: UserProfile): Promise<boolean> => {
+  try {
+    const res = await fetch(`${API_BASE}/auth/sync-local-user`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(user),
+    });
+    return res.ok;
+  } catch {
+    return false;
   }
-  if (digits.length === 10 && digits.startsWith('1')) {
-    digits = '0' + digits;
-  }
-  return digits || String(phone).trim();
-};
-
-export const isPhoneMatch = (p1: string, p2: string): boolean => {
-  const c1 = normalizePhone(p1);
-  const c2 = normalizePhone(p2);
-  if (!c1 || !c2) return false;
-  if (c1 === c2) return true;
-  if (c1.length >= 10 && c2.length >= 10 && c1.slice(-10) === c2.slice(-10)) return true;
-  return false;
 };
 
 export const authApi = {
@@ -135,24 +96,21 @@ export const authApi = {
       if (!res.ok) {
         return { success: false, error: json.error || 'Registration failed' };
       }
-      // Guarantee local storage persistence as well
+      // Guarantee dual persistent vault storage (localStorage + IndexedDB)
       if (json.user) {
-        const localUsers = getLocalUsers();
-        const updated = localUsers.filter(u => !isPhoneMatch(u.phone, data.phone));
-        updated.push({
+        saveUserToVault({
           ...json.user,
           password: data.password.trim(),
           nid: data.nid.trim(),
           securityQuestion: data.securityQuestion.trim(),
           securityAnswer: data.securityAnswer.trim().toLowerCase(),
         });
-        saveLocalUsers(updated);
       }
       return { success: true, user: json.user };
     } catch (e) {
       // Offline / Local database fallback
       const cleanPhone = normalizePhone(data.phone);
-      const localUsers = getLocalUsers();
+      const localUsers = await getVaultUsersAsync();
       if (localUsers.some(u => isPhoneMatch(u.phone, cleanPhone))) {
         return { 
           success: false, 
@@ -183,43 +141,45 @@ export const authApi = {
         createdAt: Date.now(),
       };
 
-      const updated = [...localUsers, newUser];
-      saveLocalUsers(updated);
+      saveUserToVault(newUser);
       return { success: true, user: newUser };
     }
   },
 
-  // Login: universal from any device or browser with redundancy
+  // Login: universal across devices and website updates with IndexedDB + localStorage vault auto-restore
   async login(phone: string, password: string): Promise<AuthResponse> {
+    const cleanPassword = password.trim();
     try {
       const res = await fetch(`${API_BASE}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, password }),
+        body: JSON.stringify({ phone, password: cleanPassword }),
       });
       const json = await res.json();
       if (res.ok && json.success && json.user) {
-        // Cache user in localStorage with password
-        const localUsers = getLocalUsers();
-        const updated = localUsers.filter(u => !isPhoneMatch(u.phone, phone));
-        updated.push({ ...json.user, password: password.trim() });
-        saveLocalUsers(updated);
+        saveUserToVault({ ...json.user, password: cleanPassword });
         return { success: true, user: json.user };
       }
 
-      // If server returned 401 ("No account registered"), check local storage redundancy
-      const localUsers = getLocalUsers();
-      const localUser = localUsers.find(u => isPhoneMatch(u.phone, phone));
-      if (localUser && localUser.password === password.trim()) {
-        // Auto-sync this user to server db so it exists everywhere
-        try {
-          await fetch(`${API_BASE}/auth/sync-local-user`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(localUser),
-          });
-        } catch (syncErr) {}
-        return { success: true, user: localUser };
+      // If server returned 401/404 ("No account registered" after site update), check persistent vault
+      if (res.status === 401 || res.status === 404) {
+        const vaultUser = await findVaultUser(phone);
+        if (vaultUser) {
+          if (vaultUser.password && vaultUser.password !== cleanPassword) {
+            return { success: false, error: 'Incorrect password. Please verify and try again.' };
+          }
+          if (vaultUser.password === cleanPassword) {
+            if (vaultUser.isSuspended) {
+              return {
+                success: false,
+                error: 'Your account has been suspended by administration. Contact Help Desk support for inquiries.',
+                isSuspended: true,
+              };
+            }
+            await syncUserToServer(vaultUser);
+            return { success: true, user: vaultUser };
+          }
+        }
       }
 
       return { 
@@ -228,15 +188,14 @@ export const authApi = {
         isSuspended: json.isSuspended
       };
     } catch (e) {
-      // Local database fallback
-      const localUsers = getLocalUsers();
-      const user = localUsers.find(u => isPhoneMatch(u.phone, phone));
+      // Local / IndexedDB vault fallback
+      const user = await findVaultUser(phone);
 
       if (!user) {
         return { success: false, error: 'No account found with this phone number.' };
       }
 
-      if (user.password !== password.trim()) {
+      if (user.password !== cleanPassword) {
         return { success: false, error: 'Incorrect password. Please verify and try again.' };
       }
 
@@ -248,6 +207,7 @@ export const authApi = {
         };
       }
 
+      await syncUserToServer(user);
       return { success: true, user };
     }
   },
@@ -261,52 +221,78 @@ export const authApi = {
         body: JSON.stringify({ phone }),
       });
       const json = await res.json();
-      if (!res.ok) {
-        return { success: false, error: json.error || 'Failed to retrieve security question.' };
+      if (res.ok) {
+        return { success: true, securityQuestion: json.securityQuestion };
       }
-      return { success: true, securityQuestion: json.securityQuestion };
+      if (res.status === 404) {
+        const vaultUser = await findVaultUser(phone);
+        if (vaultUser) {
+          await syncUserToServer(vaultUser);
+          return { success: true, securityQuestion: vaultUser.securityQuestion || "What is your childhood nickname?" };
+        }
+      }
+      return { success: false, error: json.error || 'Failed to retrieve security question.' };
     } catch (e) {
-      const localUsers = getLocalUsers();
-      const user = localUsers.find(u => isPhoneMatch(u.phone, phone));
+      const user = await findVaultUser(phone);
       if (!user) return { success: false, error: 'No account found with this phone number.' };
       return { success: true, securityQuestion: user.securityQuestion || "What is your childhood nickname?" };
     }
   },
 
-  // Reset password using Security Question (supports selecting question)
+  // Reset password using Security Question (supports selecting question & post-update vault recovery)
   async resetWithSecurityQuestion(
     phone: string, 
     securityQuestion: string, 
     securityAnswer: string, 
     newPassword: string
   ): Promise<AuthResponse> {
+    const cleanNewPassword = newPassword.trim();
     try {
       const res = await fetch(`${API_BASE}/auth/reset-with-security-question`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, securityQuestion, securityAnswer, newPassword }),
+        body: JSON.stringify({ phone, securityQuestion, securityAnswer, newPassword: cleanNewPassword }),
       });
       const json = await res.json();
-      if (!res.ok) {
-        return { success: false, error: json.error || 'Reset failed.' };
-      }
-      // Also update local storage
-      const localUsers = getLocalUsers();
-      const userIdx = localUsers.findIndex(u => isPhoneMatch(u.phone, phone));
-      if (userIdx !== -1) {
-        localUsers[userIdx].password = newPassword.trim();
-        saveLocalUsers(localUsers);
-      }
-      return { success: true, message: json.message };
-    } catch (e) {
-      const localUsers = getLocalUsers();
-      const index = localUsers.findIndex(u => isPhoneMatch(u.phone, phone));
 
-      if (index === -1) {
+      if (res.ok) {
+        const vaultUser = await findVaultUser(phone);
+        if (vaultUser) {
+          saveUserToVault({ ...vaultUser, password: cleanNewPassword });
+        }
+        return { success: true, message: json.message };
+      }
+
+      // If server returned 404 after update, verify against persistent vault and restore to server
+      if (res.status === 404) {
+        const vaultUser = await findVaultUser(phone);
+        if (vaultUser) {
+          if (securityQuestion && vaultUser.securityQuestion) {
+            if (vaultUser.securityQuestion.toLowerCase() !== securityQuestion.trim().toLowerCase()) {
+              return {
+                success: false,
+                error: 'The selected security question does not match this account. Please select the question you chose during registration, or click "Forgot Security Question" below.'
+              };
+            }
+          }
+          if (vaultUser.securityAnswer && vaultUser.securityAnswer.toLowerCase() !== securityAnswer.trim().toLowerCase()) {
+            return { success: false, error: 'Incorrect answer to security question. If forgotten, recover via NID.' };
+          }
+          const updatedUser = { ...vaultUser, password: cleanNewPassword };
+          saveUserToVault(updatedUser);
+          await syncUserToServer(updatedUser);
+          return { success: true, message: 'Password has been updated. You can now login.' };
+        }
+      }
+
+      return { success: false, error: json.error || 'Reset failed.' };
+    } catch (e) {
+      const user = await findVaultUser(phone);
+
+      if (!user) {
         return { success: false, error: 'No account found with this phone number.' };
       }
 
-      const user = localUsers[index];
       if (securityQuestion && user.securityQuestion) {
         if (user.securityQuestion.toLowerCase() !== securityQuestion.trim().toLowerCase()) {
           return {
@@ -320,13 +306,14 @@ export const authApi = {
         return { success: false, error: 'Incorrect answer to security question. If forgotten, recover via NID.' };
       }
 
-      localUsers[index].password = newPassword.trim();
-      saveLocalUsers(localUsers);
+      const updatedUser = { ...user, password: cleanNewPassword };
+      saveUserToVault(updatedUser);
+      await syncUserToServer(updatedUser);
       return { success: true, message: 'Password has been updated. You can now login.' };
     }
   },
 
-  // Recover Security Question using NID + Phone Number
+  // Recover Security Question using NID + Phone Number (with vault auto-restore)
   async recoverSecurityQuestion(phone: string, nid: string): Promise<{ 
     success: boolean; 
     securityQuestion?: string; 
@@ -342,19 +329,36 @@ export const authApi = {
         body: JSON.stringify({ phone, nid }),
       });
       const json = await res.json();
-      if (!res.ok) {
-        return { success: false, error: json.error || 'NID and Phone verification failed.' };
+      if (res.ok) {
+        return {
+          success: true,
+          securityQuestion: json.securityQuestion,
+          securityAnswer: json.securityAnswer,
+          smsMessage: json.smsMessage,
+          message: json.message,
+        };
       }
-      return {
-        success: true,
-        securityQuestion: json.securityQuestion,
-        securityAnswer: json.securityAnswer,
-        smsMessage: json.smsMessage,
-        message: json.message,
-      };
+      if (res.status === 404) {
+        const vaultUser = await findVaultUser(phone);
+        if (vaultUser) {
+          if (!vaultUser.nid || String(vaultUser.nid).trim() !== String(nid).trim()) {
+            return { success: false, error: 'NID number does not match our records for this account.' };
+          }
+          await syncUserToServer(vaultUser);
+          const q = vaultUser.securityQuestion || "What is your childhood nickname?";
+          const a = vaultUser.securityAnswer || "shanto";
+          return {
+            success: true,
+            securityQuestion: q,
+            securityAnswer: a,
+            smsMessage: `SMS to ${phone}: Security Recovery: Your question is "${q}" and answer is "${a}".`,
+            message: 'Security details verified. Your Security Question and Answer have been sent via SMS.',
+          };
+        }
+      }
+      return { success: false, error: json.error || 'NID and Phone verification failed.' };
     } catch (e) {
-      const localUsers = getLocalUsers();
-      const user = localUsers.find(u => isPhoneMatch(u.phone, phone));
+      const user = await findVaultUser(phone);
 
       if (!user) return { success: false, error: 'No account registered with this phone number.' };
       if (!user.nid || String(user.nid).trim() !== String(nid).trim()) {
@@ -367,7 +371,7 @@ export const authApi = {
         success: true,
         securityQuestion: q,
         securityAnswer: a,
-        smsMessage: `📲 SMS to ${phone}: Security Recovery: Your question is "${q}" and answer is "${a}".`,
+        smsMessage: `SMS to ${phone}: Security Recovery: Your question is "${q}" and answer is "${a}".`,
         message: 'Security details verified. Your Security Question and Answer have been sent via SMS.',
       };
     }
@@ -424,35 +428,68 @@ export const authApi = {
       if (!res.ok) {
         return { success: false, error: json.error || 'Action failed' };
       }
+      if (json.user) saveUserToVault(json.user);
       return { success: true, user: json.user };
     } catch (e) {
-      const localUsers = getLocalUsers();
-      const index = localUsers.findIndex(u => u.id === userId);
-      if (index !== -1) {
-        localUsers[index].isSuspended = suspended;
-        if (reason) localUsers[index].suspensionReason = reason;
-        saveLocalUsers(localUsers);
-        return { success: true, user: localUsers[index] };
+      const localUsers = await getVaultUsersAsync();
+      const target = localUsers.find(u => u.id === userId);
+      if (target) {
+        const updated = { ...target, isSuspended: suspended, ...(reason ? { suspensionReason: reason } : {}) };
+        saveUserToVault(updated);
+        return { success: true, user: updated };
       }
       return { success: false, error: 'User not found' };
     }
   },
 
-  // Fetch all users
+  // Restore a single user to backend if missing after update
+  async restoreUserToServer(user: UserProfile): Promise<boolean> {
+    if (!user || !user.phone) return false;
+    const vaultMatch = await findVaultUser(user.phone || user.id);
+    const merged = vaultMatch
+      ? {
+          ...vaultMatch,
+          ...user,
+          password: user.password || vaultMatch.password,
+          nid: user.nid || vaultMatch.nid,
+          securityQuestion: user.securityQuestion || vaultMatch.securityQuestion,
+          securityAnswer: user.securityAnswer || vaultMatch.securityAnswer,
+        }
+      : user;
+    saveUserToVault(merged);
+    return syncUserToServer(merged);
+  },
+
+  // Fetch all users non-destructively (merges vault + syncs back any accounts missing on updated server)
   async fetchUsers(): Promise<UserProfile[]> {
     try {
       const res = await fetch(`${API_BASE}/users`);
       if (res.ok) {
         const json = await res.json();
         if (json.users && Array.isArray(json.users)) {
-          saveLocalUsers(json.users);
-          return json.users;
+          const { mergedUsers, missingOnServer } = await mergeServerUsersIntoVault(json.users);
+
+          // Automatically restore any accounts from local/IndexedDB vault that vanished after a website update
+          const restorable = missingOnServer.filter((u) => Boolean(u.phone && (u.password || u.id)));
+          if (restorable.length > 0) {
+            try {
+              await fetch(`${API_BASE}/auth/sync-local-users`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ users: restorable }),
+              });
+            } catch {
+              // ignore batch restore network failure; individual sync will handle on login
+            }
+          }
+
+          return mergedUsers;
         }
       }
     } catch (e) {
       // ignore
     }
-    return getLocalUsers();
+    return await getVaultUsersAsync();
   },
 
   // Claim Weekly, Monthly, or Festival Special Bonus (Server persistent)
@@ -467,20 +504,29 @@ export const authApi = {
       if (!res.ok) {
         return { success: false, error: json.error || 'Failed to claim bonus' };
       }
+      if (json.user) saveUserToVault(json.user);
       return { success: true, user: json.user };
     } catch (e) {
       return { success: false, error: 'Network error claiming bonus' };
     }
   },
 
-  // Sync user balance on server
+  // Sync user balance on server + vault
   async syncBalance(userId: string, data: { walletBalance?: number; lockedBonusBalance?: number; totalWagered?: number; referralWagerRequirement?: number }): Promise<void> {
+    const existing = getVaultUsersSync().find((u) => isUserMatch(u, userId));
+    if (existing) {
+      saveUserToVault({ ...existing, ...data });
+    }
     try {
-      await fetch(`${API_BASE}/users/${userId}/balance`, {
+      const res = await fetch(`${API_BASE}/users/${userId}/balance`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       });
+      if (res.status === 404 && existing) {
+        // Re-restore missing user first, then retry balance sync
+        await syncUserToServer({ ...existing, ...data });
+      }
     } catch (e) {
       // ignore
     }
@@ -498,6 +544,7 @@ export const authApi = {
       if (!res.ok) {
         return { success: false, error: json.error || 'Failed to grant bonus' };
       }
+      if (json.user) saveUserToVault(json.user);
       return { success: true, user: json.user };
     } catch (e) {
       return { success: false, error: 'Network error granting bonus' };
@@ -529,6 +576,7 @@ export const authApi = {
       if (!res.ok) {
         return { success: false, error: json.error || 'Deposit submission failed' };
       }
+      if (json.user) saveUserToVault(json.user);
       return { success: true, deposit: json.deposit, user: json.user };
     } catch (e) {
       return { success: false, error: 'Network error submitting deposit' };
@@ -582,6 +630,7 @@ export const authApi = {
       if (!res.ok) {
         return { success: false, error: json.error || 'Withdrawal submission failed' };
       }
+      if (json.user) saveUserToVault(json.user);
       return { success: true, withdrawal: json.withdrawal, user: json.user };
     } catch (e) {
       return { success: false, error: 'Network error submitting withdrawal' };

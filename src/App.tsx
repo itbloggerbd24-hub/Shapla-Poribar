@@ -43,6 +43,7 @@ import { ProfileModal } from './components/ProfileModal';
 import { DepositAnalyticsModal } from './components/DepositAnalyticsModal';
 import { PayoutAnalyticsModal } from './components/PayoutAnalyticsModal';
 import { authApi } from './utils/authApi';
+import { saveUserToVault, getVaultUsersSync } from './utils/accountVault';
 import { checkWithdrawalHours } from './utils/withdrawalHours';
 import { 
   Coins, 
@@ -138,12 +139,18 @@ export default function App() {
   useEffect(() => {
     if (currentUser) {
       saveToStorage('active_user_session', user);
+      saveUserToVault(user);
     }
   }, [user, currentUser]);
 
   // Sync users database, deposits, withdrawals, settings, and notifications on mount from backend
   useEffect(() => {
-    authApi.fetchUsers().then((fetched) => {
+    // Ensure active user session (if any) is safely recorded in persistent vault
+    if (currentUser) {
+      saveUserToVault(currentUser);
+    }
+
+    authApi.fetchUsers().then(async (fetched) => {
       if (fetched && fetched.length > 0) {
         setAllUsers(fetched);
         if (currentUser) {
@@ -152,6 +159,12 @@ export default function App() {
             setUser(fresh);
             setCurrentUser(fresh);
             saveToStorage('active_user_session', fresh);
+            saveUserToVault(fresh);
+          } else {
+            // Active user missing on updated server -> restore immediately to server
+            await authApi.restoreUserToServer(currentUser);
+            const fallbackUsers = getVaultUsersSync();
+            setAllUsers(fallbackUsers);
           }
         }
       }

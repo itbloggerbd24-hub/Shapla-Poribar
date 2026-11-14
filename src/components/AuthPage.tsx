@@ -15,14 +15,18 @@ import {
   CheckCircle2, 
   Sparkles,
   KeyRound,
-  RotateCcw,
-  Smartphone,
   CreditCard,
   HelpCircle,
   MessageSquare,
   Copy,
-  Check
+  Check,
+  Download,
+  Smartphone,
+  Share,
+  MoreVertical,
+  X
 } from 'lucide-react';
+import { usePWAInstall } from '../hooks/usePWAInstall';
 
 interface AuthPageProps {
   onLoginSuccess: (user: UserProfile) => void;
@@ -106,6 +110,34 @@ export const AuthPage: React.FC<AuthPageProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+
+  // Login-Page-Only App Download / PWA Install state
+  const { isInstallable, isInstalled, isIOS, install } = usePWAInstall();
+  const [showInstallGuide, setShowInstallGuide] = useState(false);
+  const [copiedAppLink, setCopiedAppLink] = useState(false);
+
+  const handleAppDownloadClick = async () => {
+    if (isInstallable) {
+      const outcome = await install();
+      if (outcome === 'accepted') {
+        setSuccessMsg('App installation started! Check your home screen or app drawer.');
+        return;
+      }
+      if (outcome === 'dismissed') {
+        return;
+      }
+    }
+    setShowInstallGuide(true);
+  };
+
+  const handleCopyAppLink = () => {
+    if (typeof window !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(window.location.origin).then(() => {
+        setCopiedAppLink(true);
+        setTimeout(() => setCopiedAppLink(false), 2500);
+      });
+    }
+  };
 
   // Timer for resend code
   useEffect(() => {
@@ -501,6 +533,39 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                   </>
                 )}
               </button>
+
+              {/* Login-Page-Only App Download Section */}
+              <div className="pt-3 mt-1 border-t border-slate-800/80">
+                {isInstalled ? (
+                  <div className="w-full py-2.5 px-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-bold flex items-center justify-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                    <span>Running Shapla Poribar Installed App</span>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleAppDownloadClick}
+                    className="w-full py-2.5 px-4 rounded-xl bg-slate-950 hover:bg-slate-800/90 border border-emerald-500/40 hover:border-emerald-400 text-slate-100 flex items-center justify-between gap-3 transition cursor-pointer group"
+                  >
+                    <div className="flex items-center gap-2.5 text-left">
+                      <div className="w-8 h-8 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 flex items-center justify-center shrink-0 group-hover:scale-105 transition">
+                        <Download className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <div className="text-xs font-black text-emerald-300 leading-tight">
+                          Download Mobile App
+                        </div>
+                        <div className="text-[10px] text-slate-400 leading-tight">
+                          Install Shapla Poribar on Android, iOS & Desktop
+                        </div>
+                      </div>
+                    </div>
+                    <span className="px-2.5 py-1 rounded-lg bg-emerald-500 text-slate-950 text-[10px] font-black uppercase tracking-wide shrink-0">
+                      Install
+                    </span>
+                  </button>
+                )}
+              </div>
             </form>
           )}
 
@@ -961,6 +1026,99 @@ export const AuthPage: React.FC<AuthPageProps> = ({
         </div>
         <p>© 2026 Shapla Poribar Official Platform</p>
       </footer>
+
+      {/* Login-Page-Only App Install Guide Modal */}
+      {tab === 'LOGIN' && showInstallGuide && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-slate-900 border border-slate-700 rounded-3xl p-5 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 flex items-center justify-center">
+                  <Smartphone className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-black text-white">Install Shapla Poribar App</h2>
+                  <p className="text-[11px] text-slate-400">Add to your phone home screen</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowInstallGuide(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {isIOS ? (
+              <div className="space-y-2.5 text-xs text-slate-200">
+                <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
+                  <div className="font-bold text-amber-300">iPhone / iPad (Safari):</div>
+                  <p className="flex items-center gap-2 text-slate-300">
+                    <span className="w-5 h-5 rounded-full bg-slate-800 text-amber-300 font-bold flex items-center justify-center shrink-0">1</span>
+                    <span>Open this page directly in <strong>Safari</strong>.</span>
+                  </p>
+                  <p className="flex items-center gap-2 text-slate-300">
+                    <span className="w-5 h-5 rounded-full bg-slate-800 text-amber-300 font-bold flex items-center justify-center shrink-0">2</span>
+                    <span className="inline-flex items-center gap-1">Tap the <Share className="w-3.5 h-3.5 text-sky-400 inline" /> <strong>Share</strong> button at the bottom bar.</span>
+                  </p>
+                  <p className="flex items-center gap-2 text-slate-300">
+                    <span className="w-5 h-5 rounded-full bg-slate-800 text-amber-300 font-bold flex items-center justify-center shrink-0">3</span>
+                    <span>Scroll and tap <strong>Add to Home Screen</strong>, then tap <strong>Add</strong>.</span>
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-2.5 text-xs text-slate-200">
+                <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
+                  <div className="font-bold text-emerald-300">Android (Chrome) & Desktop Browser:</div>
+                  <p className="flex items-center gap-2 text-slate-300">
+                    <span className="w-5 h-5 rounded-full bg-slate-800 text-emerald-300 font-bold flex items-center justify-center shrink-0">1</span>
+                    <span>Open this website URL directly in your phone's <strong>Chrome</strong> browser.</span>
+                  </p>
+                  <p className="flex items-center gap-2 text-slate-300">
+                    <span className="w-5 h-5 rounded-full bg-slate-800 text-emerald-300 font-bold flex items-center justify-center shrink-0">2</span>
+                    <span className="inline-flex items-center gap-1">Tap the browser menu <MoreVertical className="w-3.5 h-3.5 text-emerald-400 inline" /> (top-right).</span>
+                  </p>
+                  <p className="flex items-center gap-2 text-slate-300">
+                    <span className="w-5 h-5 rounded-full bg-slate-800 text-emerald-300 font-bold flex items-center justify-center shrink-0">3</span>
+                    <span>Tap <strong>Install app</strong> or <strong>Add to Home screen</strong> to download the app icon.</span>
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Direct App Link Copy Helper */}
+            <div className="p-3 rounded-xl bg-slate-950/90 border border-slate-800 space-y-2">
+              <div className="text-[11px] font-bold text-slate-400">Official App Link (open in Chrome / Safari to install):</div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  readOnly
+                  value={typeof window !== 'undefined' ? window.location.origin : ''}
+                  className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-[11px] text-amber-300 font-mono outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={handleCopyAppLink}
+                  className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-[11px] inline-flex items-center gap-1 cursor-pointer shrink-0"
+                >
+                  {copiedAppLink ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copiedAppLink ? 'Copied' : 'Copy'}</span>
+                </button>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowInstallGuide(false)}
+              className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs cursor-pointer"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
 
     </div>
   );

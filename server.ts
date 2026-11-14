@@ -13,23 +13,31 @@ async function startServer() {
 
   app.use(express.json({ limit: '10mb' }));
 
-  // Central Database Directory and File
-  const DATA_DIR = path.resolve(__dirname, 'data');
+  // Central Database Directory and File (with atomic write + automatic backup recovery)
+  const DATA_DIR = process.env.DATA_DIR || path.resolve(__dirname, 'data');
   const DB_FILE = path.resolve(DATA_DIR, 'db.json');
+  const DB_BACKUP_FILE = path.resolve(DATA_DIR, 'db.backup.json');
 
   if (!fs.existsSync(DATA_DIR)) {
     fs.mkdirSync(DATA_DIR, { recursive: true });
   }
 
-  // Helper to read database
+  // Helper to read database with automatic backup fallback
   const readDb = () => {
-    try {
-      if (fs.existsSync(DB_FILE)) {
-        const content = fs.readFileSync(DB_FILE, 'utf-8');
-        return JSON.parse(content);
+    for (const candidateFile of [DB_FILE, DB_BACKUP_FILE]) {
+      try {
+        if (fs.existsSync(candidateFile)) {
+          const content = fs.readFileSync(candidateFile, 'utf-8');
+          if (content && content.trim()) {
+            const parsed = JSON.parse(content);
+            if (parsed && Array.isArray(parsed.users)) {
+              return parsed;
+            }
+          }
+        }
+      } catch (e) {
+        console.error(`Error reading ${candidateFile}:`, e);
       }
-    } catch (e) {
-      console.error('Error reading db:', e);
     }
     return {
       users: [
@@ -69,10 +77,14 @@ async function startServer() {
     };
   };
 
-  // Helper to write database
+  // Atomic database write + mirror backup
   const writeDb = (data: any) => {
     try {
-      fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2), 'utf-8');
+      const serialized = JSON.stringify(data, null, 2);
+      const tmpFile = `${DB_FILE}.tmp`;
+      fs.writeFileSync(tmpFile, serialized, 'utf-8');
+      fs.renameSync(tmpFile, DB_FILE);
+      fs.writeFileSync(DB_BACKUP_FILE, serialized, 'utf-8');
     } catch (e) {
       console.error('Error writing db:', e);
     }
@@ -99,6 +111,15 @@ async function startServer() {
     if (!c1 || !c2) return false;
     if (c1 === c2) return true;
     if (c1.length >= 10 && c2.length >= 10 && c1.slice(-10) === c2.slice(-10)) return true;
+    return false;
+  };
+
+  const isUserIdentifierMatch = (u: any, identifier: string): boolean => {
+    if (!u || !identifier) return false;
+    const raw = String(identifier).trim();
+    if (!raw) return false;
+    if (u.id && String(u.id).toLowerCase() === raw.toLowerCase()) return true;
+    if (u.phone && isPhoneMatch(u.phone, raw)) return true;
     return false;
   };
 
@@ -455,7 +476,7 @@ async function startServer() {
     }
   });
 
-  // 4. LOGIN: Universal login with bulletproof isPhoneMatch
+  // 4. LOGIN: Universal login with bulletproof phone/ID matching
   app.post('/api/auth/login', (req, res) => {
     try {
       const { phone, password } = req.body;
@@ -463,11 +484,10 @@ async function startServer() {
         return res.status(400).json({ error: 'Please enter phone number and password.' });
       }
 
-      const cleanPhone = normalizePhone(phone);
       const db = readDb();
 
-      // Find user using bulletproof isPhoneMatch (handles 01XXXXXXXXX, +8801XXXXXXXXX, 8801XXXXXXXXX, etc.)
-      const user = db.users.find((u: any) => isPhoneMatch(u.phone, cleanPhone));
+      // Find user using phone OR exact account ID
+      const user = db.users.find((u: any) => isUserIdentifierMatch(u, String(phone)));
       if (!user) {
         return res.status(401).json({ error: 'No account registered with this phone number. Please sign up.' });
       }
@@ -492,36 +512,115 @@ async function startServer() {
     }
   });
 
-  // 5. SYNC LOCAL USER TO SERVER (Redundancy: if created locally, guarantee server persistence)
+  // Helper to safely upsert/restore a local user record into server DB
+  const upsertLocalUserInDb = (db: any, incoming: any): boolean => {
+    if (!incoming || !incoming.phone) return false;
+    const cleanPhone = normalizePhone(incoming.phone);
+    if (!cleanPhone) return false;
+
+    const existingIndex = db.users.findIndex(
+      (u: any) => (incoming.id && u.id === incoming.id) || isPhoneMatch(u.phone, cleanPhone)
+    );
+
+    if (existingIndex !== -1) {
+      const existing = db.users[existingIndex];
+      db.users[existingIndex] = {
+        ...existing,
+        name: incoming.name || existing.name,
+        password: incoming.password ? String(incoming.password).trim() : existing.password,
+        nid: incoming.nid || existing.nid,
+        securityQuestion: incoming.securityQuestion || existing.securityQuestion,
+        securityAnswer: incoming.securityAnswer
+          ? String(incoming.securityAnswer).trim().toLowerCase()
+          : existing.securityAnswer,
+        binancePayId: incoming.binancePayId ?? existing.binancePayId,
+        binanceAddress: incoming.binanceAddress ?? existing.binanceAddress,
+        referralCode: incoming.referralCode || existing.referralCode,
+        referredBy: incoming.referredBy || existing.referredBy,
+        firstDepositDone: Boolean(existing.firstDepositDone || incoming.firstDepositDone),
+        claimedFestivalBonusId: existing.claimedFestivalBonusId || incoming.claimedFestivalBonusId,
+        claimedFestivalBonusIds: Array.from(
+          new Set([
+            ...(Array.isArray(existing.claimedFestivalBonusIds) ? existing.claimedFestivalBonusIds : []),
+            ...(Array.isArray(incoming.claimedFestivalBonusIds) ? incoming.claimedFestivalBonusIds : []),
+          ])
+        ),
+      };
+      return false;
+    }
+
+    // Restore user that was missing from server DB (e.g., after container rebuild/website update)
+    const restoredUser = {
+      id: incoming.id || `usr_${Date.now()}_${Math.floor(100 + Math.random() * 900)}`,
+      name: String(incoming.name || 'Player').trim(),
+      phone: cleanPhone,
+      password: incoming.password ? String(incoming.password).trim() : '',
+      nid: incoming.nid ? String(incoming.nid).trim() : '',
+      securityQuestion: incoming.securityQuestion || "What is your childhood nickname?",
+      securityAnswer: incoming.securityAnswer ? String(incoming.securityAnswer).trim().toLowerCase() : '',
+      walletBalance: Number(Number(incoming.walletBalance || 0).toFixed(2)),
+      lockedBonusBalance: Number(Number(incoming.lockedBonusBalance || 0).toFixed(2)),
+      frozenWithdrawal: Number(Number(incoming.frozenWithdrawal || 0).toFixed(2)),
+      totalWon: Number(Number(incoming.totalWon || 0).toFixed(2)),
+      totalLost: Number(Number(incoming.totalLost || 0).toFixed(2)),
+      totalWagered: Number(Number(incoming.totalWagered || 0).toFixed(2)),
+      role: incoming.role === 'ADMIN' ? 'ADMIN' : 'USER',
+      binancePayId: incoming.binancePayId || '',
+      binanceAddress: incoming.binanceAddress || '',
+      referralCode: incoming.referralCode || `SP-${cleanPhone.slice(-4)}`,
+      referredBy: incoming.referredBy || '',
+      referralCount: Number(incoming.referralCount || 0),
+      referralBonusEarned: Number(incoming.referralBonusEarned || 0),
+      referralWagerRequirement: Number(incoming.referralWagerRequirement || 0),
+      firstDepositDone: Boolean(incoming.firstDepositDone),
+      claimedFestivalBonusId: incoming.claimedFestivalBonusId,
+      claimedFestivalBonusIds: Array.isArray(incoming.claimedFestivalBonusIds) ? incoming.claimedFestivalBonusIds : [],
+      lastDailyClaim: Number(incoming.lastDailyClaim || 0),
+      lastWeeklyClaim: Number(incoming.lastWeeklyClaim || 0),
+      lastMonthlyClaim: Number(incoming.lastMonthlyClaim || 0),
+      isSuspended: Boolean(incoming.isSuspended),
+      createdAt: Number(incoming.createdAt || Date.now()),
+    };
+
+    db.users.push(restoredUser);
+    return true;
+  };
+
+  // 5. SYNC LOCAL USER TO SERVER (Redundancy: restores full user profile if container rebuilt/updated)
   app.post('/api/auth/sync-local-user', (req, res) => {
     try {
       const incoming = req.body;
-      if (!incoming || !incoming.phone || !incoming.password) {
+      if (!incoming || !incoming.phone) {
         return res.status(400).json({ error: 'Invalid user payload' });
       }
-      const cleanPhone = normalizePhone(incoming.phone);
       const db = readDb();
-      const existingIndex = db.users.findIndex((u: any) => isPhoneMatch(u.phone, cleanPhone));
-      if (existingIndex !== -1) {
-        db.users[existingIndex] = {
-          ...db.users[existingIndex],
-          password: String(incoming.password).trim(),
-          name: incoming.name || db.users[existingIndex].name,
-          nid: incoming.nid || db.users[existingIndex].nid,
-          securityQuestion: incoming.securityQuestion || db.users[existingIndex].securityQuestion,
-          securityAnswer: incoming.securityAnswer || db.users[existingIndex].securityAnswer,
-        };
-      } else {
-        db.users.push({
-          ...incoming,
-          phone: cleanPhone,
-          password: String(incoming.password).trim(),
-        });
-      }
+      const restored = upsertLocalUserInDb(db, incoming);
       writeDb(db);
-      return res.json({ success: true });
+      return res.json({ success: true, restored });
     } catch (e) {
       return res.status(500).json({ error: 'Sync failed' });
+    }
+  });
+
+  // 5b. BATCH SYNC MISSING LOCAL USERS TO SERVER ON STARTUP
+  app.post('/api/auth/sync-local-users', (req, res) => {
+    try {
+      const incomingUsers = Array.isArray(req.body?.users) ? req.body.users : [];
+      const db = readDb();
+      let restoredCount = 0;
+      for (const u of incomingUsers) {
+        if (u && u.phone && u.password) {
+          if (upsertLocalUserInDb(db, u)) {
+            restoredCount++;
+          }
+        }
+      }
+      if (restoredCount > 0) {
+        writeDb(db);
+      }
+      return res.json({ success: true, restoredCount });
+    } catch (e) {
+      return res.status(500).json({ error: 'Batch sync failed' });
     }
   });
 
@@ -533,9 +632,8 @@ async function startServer() {
         return res.status(400).json({ error: 'Phone number is required.' });
       }
 
-      const cleanPhone = normalizePhone(phone);
       const db = readDb();
-      const user = db.users.find((u: any) => isPhoneMatch(u.phone, cleanPhone));
+      const user = db.users.find((u: any) => isUserIdentifierMatch(u, String(phone)));
 
       if (!user) {
         return res.status(404).json({ error: 'No account found with this phone number. Please verify.' });
@@ -560,9 +658,8 @@ async function startServer() {
         return res.status(400).json({ error: 'New password must be at least 6 characters.' });
       }
 
-      const cleanPhone = normalizePhone(phone);
       const db = readDb();
-      const userIndex = db.users.findIndex((u: any) => isPhoneMatch(u.phone, cleanPhone));
+      const userIndex = db.users.findIndex((u: any) => isUserIdentifierMatch(u, String(phone)));
 
       if (userIndex === -1) {
         return res.status(404).json({ error: 'No account found with this phone number.' });
@@ -607,11 +704,10 @@ async function startServer() {
         return res.status(400).json({ error: 'Both phone number and registered NID number are required.' });
       }
 
-      const cleanPhone = normalizePhone(phone);
       const cleanNid = String(nid).trim();
 
       const db = readDb();
-      const user = db.users.find((u: any) => isPhoneMatch(u.phone, cleanPhone));
+      const user = db.users.find((u: any) => isUserIdentifierMatch(u, String(phone)));
 
       if (!user) {
         return res.status(404).json({ error: 'No account registered with this phone number.' });
