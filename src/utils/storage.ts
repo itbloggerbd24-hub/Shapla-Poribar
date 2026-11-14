@@ -1,8 +1,30 @@
-import { AdminSettings, DepositRequest, UserProfile, WithdrawalRequest, Round, RankedPlayer } from '../types/game';
+import { AdminSettings, BonusConfig, DepositRequest, UserProfile, WithdrawalRequest, Round, RankedPlayer } from '../types/game';
 
 export const OFFICIAL_BINANCE_PAY_ID = '1156528658';
 export const OFFICIAL_USDT_BEP20_ADDRESS = '0xd1194126385ab996d60542f54e5d8f1372a4cc3e';
 export const OFFICIAL_USDT_TRC20_ADDRESS = 'TPHsdQU9EzZYMkQRuaqYA9UkrD25h86gNU';
+
+export const DEFAULT_BONUS_CONFIG: BonusConfig = {
+  bonusesEnabled: true,
+  minDepositForBonusUSD: 5.00,
+  welcomeBonusEnabled: true,
+  welcomeBonusUSD: 1.00,
+  depositBonusEnabled: false,
+  depositBonusPercent: 0,
+  weeklyBonusEnabled: true,
+  weeklyBonusUSD: 0.50,
+  monthlyBonusEnabled: true,
+  monthlyBonusUSD: 1.00,
+  referralBonusEnabled: true,
+  referralBonusUSD: 0.50,
+  referralMilestonesEnabled: true,
+  referralMilestone5USD: 0.50,
+  referralMilestone10USD: 1.00,
+  referralMilestone20USD: 3.00,
+  referralMilestone50USD: 5.00,
+  referralMilestone100USD: 10.00,
+  customPromoText: '',
+};
 
 export const DEFAULT_ADMIN_SETTINGS: AdminSettings = {
   binancePayId: OFFICIAL_BINANCE_PAY_ID,
@@ -53,6 +75,7 @@ export const DEFAULT_ADMIN_SETTINGS: AdminSettings = {
   ],
   supportContactWhatsapp: '+8801899999999',
   supportContactTelegram: 'ShaplaPoribarSupport',
+  bonusConfig: DEFAULT_BONUS_CONFIG,
 };
 
 export const INITIAL_USER: UserProfile = {
@@ -258,6 +281,16 @@ export function sanitizeAdminSettings(settings?: Partial<AdminSettings>): AdminS
   base.binancePayId = OFFICIAL_BINANCE_PAY_ID;
   base.usdtBep20Address = OFFICIAL_USDT_BEP20_ADDRESS;
   base.usdtTrc20Address = OFFICIAL_USDT_TRC20_ADDRESS;
+
+  base.bonusConfig = {
+    ...DEFAULT_BONUS_CONFIG,
+    ...(settings?.bonusConfig || {}),
+  };
+
+  base.quickNotice = {
+    ...DEFAULT_ADMIN_SETTINGS.quickNotice,
+    ...(settings?.quickNotice || {}),
+  };
 
   base.supportPaymentMethods = [
     {

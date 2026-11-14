@@ -1,12 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   AdminSettings, 
+  BonusConfig,
   DepositRequest, 
   Round, 
   UserProfile, 
   WithdrawalRequest,
   Bet
 } from '../types/game';
+import { DEFAULT_BONUS_CONFIG } from '../utils/storage';
 import { 
   CheckCircle2, 
   XCircle, 
@@ -35,12 +37,15 @@ import {
   Calendar,
   DollarSign,
   Wallet,
-  Activity
+  Activity,
+  Gift,
+  Flame,
+  RotateCcw
 } from 'lucide-react';
 
 interface AdminPanelProps {
   settings: AdminSettings;
-  onUpdateSettings: (newSettings: AdminSettings) => void;
+  onUpdateSettings: (newSettings: AdminSettings) => void | Promise<void>;
   deposits: DepositRequest[];
   onApproveDeposit: (depositId: string) => void;
   onRejectDeposit: (depositId: string, note?: string) => void;
@@ -51,6 +56,7 @@ interface AdminPanelProps {
   currentRound: Round;
   users: UserProfile[];
   onAdjustUserBalance: (userId: string, newBalance: number) => void;
+  onGrantUserBonus?: (userId: string, amountUSD: number, note?: string) => Promise<boolean | void>;
   onToggleSuspendUser?: (userId: string, isSuspended: boolean, reason?: string) => void;
   onPublishNotice?: (title: string, message: string, badge?: string) => Promise<boolean | void>;
   onCloseAdmin: () => void;
@@ -69,21 +75,47 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   roundsHistory,
   users,
   onAdjustUserBalance,
+  onGrantUserBonus,
   onToggleSuspendUser,
   onPublishNotice,
   onCloseAdmin,
   allBets = [],
 }) => {
-  const [activeTab, setActiveTab] = useState<'DEPOSITS' | 'WITHDRAWALS' | 'NOTICES' | 'SETTINGS' | 'USERS'>('DEPOSITS');
+  const [activeTab, setActiveTab] = useState<'DEPOSITS' | 'WITHDRAWALS' | 'BONUSES' | 'NOTICES' | 'SETTINGS' | 'USERS'>('DEPOSITS');
   const [editableSettings, setEditableSettings] = useState<AdminSettings>(settings);
   const [settingsSaved, setSettingsSaved] = useState<boolean>(false);
+  const [bonusesSaved, setBonusesSaved] = useState<boolean>(false);
   const [noticePublished, setNoticePublished] = useState<boolean>(false);
   
-  // User balance adjustment state
+  useEffect(() => {
+    setEditableSettings(settings);
+  }, [settings]);
+
+  // User balance & bonus adjustment state
   const [userSearch, setUserSearch] = useState('');
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [adjustAmount, setAdjustAmount] = useState<number>(0);
+  const [grantBonusUserId, setGrantBonusUserId] = useState<string | null>(null);
+  const [grantBonusAmount, setGrantBonusAmount] = useState<number>(1.00);
+  const [grantBonusNote, setGrantBonusNote] = useState<string>('');
+  const [bonusGrantedBanner, setBonusGrantedBanner] = useState<string | null>(null);
   const [viewingDepositSlip, setViewingDepositSlip] = useState<DepositRequest | null>(null);
+
+  const bonusCfg: BonusConfig = {
+    ...DEFAULT_BONUS_CONFIG,
+    ...(editableSettings.bonusConfig || {}),
+  };
+
+  const updateBonusField = <K extends keyof BonusConfig>(field: K, value: BonusConfig[K]) => {
+    setEditableSettings((prev) => ({
+      ...prev,
+      bonusConfig: {
+        ...DEFAULT_BONUS_CONFIG,
+        ...(prev.bonusConfig || {}),
+        [field]: value,
+      },
+    }));
+  };
 
   // Time Boundaries for Reporting (Accurate local day/week/month/year)
   const now = new Date();
@@ -184,11 +216,25 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     netCashMargin,
   };
 
-  const handleSaveSettings = (e: React.FormEvent) => {
+  const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
-    onUpdateSettings(editableSettings);
+    await onUpdateSettings(editableSettings);
     setSettingsSaved(true);
     setTimeout(() => setSettingsSaved(false), 2500);
+  };
+
+  const handleSaveBonusOffers = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await onUpdateSettings(editableSettings);
+    setBonusesSaved(true);
+    setTimeout(() => setBonusesSaved(false), 2500);
+  };
+
+  const handleResetDefaultBonuses = () => {
+    setEditableSettings((prev) => ({
+      ...prev,
+      bonusConfig: { ...DEFAULT_BONUS_CONFIG },
+    }));
   };
 
   return (
@@ -553,6 +599,27 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         </button>
 
         <button
+          onClick={() => setActiveTab('BONUSES')}
+          className={`py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 transition cursor-pointer whitespace-nowrap ${
+            activeTab === 'BONUSES'
+              ? 'bg-amber-500 text-slate-950 font-black'
+              : 'bg-slate-900 text-slate-400 hover:text-white'
+          }`}
+        >
+          <Gift className="w-4 h-4" />
+          <span>Bonus Offers</span>
+          {bonusCfg.bonusesEnabled ? (
+            <span className="px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-300 text-[9px] font-bold">
+              LIVE
+            </span>
+          ) : (
+            <span className="px-1.5 py-0.2 rounded-full bg-rose-500/20 text-rose-300 text-[9px] font-bold">
+              OFF
+            </span>
+          )}
+        </button>
+
+        <button
           onClick={() => setActiveTab('NOTICES')}
           className={`py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 transition cursor-pointer whitespace-nowrap ${
             activeTab === 'NOTICES'
@@ -826,7 +893,346 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         </div>
       )}
 
-      {/* Tab 3: QUICK NOTICES & ANNOUNCEMENT BOARD */}
+      {/* Tab 3: BONUS OFFERS MANAGEMENT */}
+      {activeTab === 'BONUSES' && (
+        <form onSubmit={handleSaveBonusOffers} className="bg-slate-900 border border-slate-800 rounded-3xl p-5 sm:p-6 shadow-xl space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-800">
+            <div>
+              <div className="flex items-center gap-2">
+                <Gift className="w-5 h-5 text-amber-400" />
+                <h3 className="text-base font-black text-white">All Bonus Offers & Promotions Control</h3>
+              </div>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Customize every bonus amount, percentage promo, and milestone reward across the entire platform.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              {bonusesSaved && (
+                <span className="text-xs text-emerald-400 font-bold bg-emerald-500/20 px-3 py-1 rounded-lg border border-emerald-500/30">
+                  ✓ Bonus offers saved & live!
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={handleResetDefaultBonuses}
+                className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white font-bold text-xs flex items-center gap-1.5 transition cursor-pointer"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Reset Defaults</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Master Switch & Global Rules */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="flex items-center justify-between p-4 rounded-2xl bg-slate-950 border border-slate-800">
+              <div>
+                <span className="text-xs font-black text-white block">Master Bonus Program</span>
+                <span className="text-[11px] text-slate-400 block mt-0.5">
+                  Turn all platform bonuses on or off globally.
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => updateBonusField('bonusesEnabled', !bonusCfg.bonusesEnabled)}
+                className={`w-12 h-6 flex items-center rounded-full p-1 cursor-pointer transition shrink-0 ${
+                  bonusCfg.bonusesEnabled ? 'bg-emerald-500 justify-end' : 'bg-slate-700 justify-start'
+                }`}
+              >
+                <div className="bg-white w-4 h-4 rounded-full shadow" />
+              </button>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800">
+              <label className="block text-xs font-bold text-slate-300 mb-1">
+                Min 1st Deposit to Unlock Bonuses ($ USD):
+              </label>
+              <input
+                type="number"
+                min="0"
+                step="0.50"
+                value={bonusCfg.minDepositForBonusUSD}
+                onChange={(e) => updateBonusField('minDepositForBonusUSD', Math.max(0, Number(e.target.value)))}
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl py-2 px-3 text-sm text-amber-300 font-mono font-bold focus:border-amber-400 outline-none"
+              />
+            </div>
+          </div>
+
+          {/* Welcome Signup Bonus & Deposit Promo Bonus */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Welcome / 1st Deposit Signup Bonus */}
+            <div className="p-4 rounded-2xl bg-gradient-to-br from-emerald-950/30 via-slate-950 to-slate-950 border border-emerald-500/30 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-sm font-black text-emerald-300 flex items-center gap-1.5">
+                    <Sparkles className="w-4 h-4 text-emerald-400" />
+                    <span>Welcome / 1st Deposit Bonus</span>
+                  </h4>
+                  <p className="text-[11px] text-slate-400">Credited automatically on user's 1st approved deposit</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => updateBonusField('welcomeBonusEnabled', !bonusCfg.welcomeBonusEnabled)}
+                  className={`w-11 h-6 flex items-center rounded-full p-1 cursor-pointer transition shrink-0 ${
+                    bonusCfg.welcomeBonusEnabled ? 'bg-emerald-500 justify-end' : 'bg-slate-700 justify-start'
+                  }`}
+                >
+                  <div className="bg-white w-4 h-4 rounded-full shadow" />
+                </button>
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold text-slate-300 mb-1">Welcome Bonus Amount ($ USD):</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.10"
+                  value={bonusCfg.welcomeBonusUSD}
+                  onChange={(e) => updateBonusField('welcomeBonusUSD', Math.max(0, Number(e.target.value)))}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl py-2 px-3 text-sm text-emerald-300 font-mono font-bold focus:border-emerald-400 outline-none"
+                />
+              </div>
+            </div>
+
+            {/* Extra % Deposit Promo Bonus */}
+            <div className="p-4 rounded-2xl bg-gradient-to-br from-amber-950/30 via-slate-950 to-slate-950 border border-amber-500/30 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-sm font-black text-amber-300 flex items-center gap-1.5">
+                    <DollarSign className="w-4 h-4 text-amber-400" />
+                    <span>Deposit Percentage Offer (%)</span>
+                  </h4>
+                  <p className="text-[11px] text-slate-400">Extra % bonus on every approved deposit (optional promo)</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => updateBonusField('depositBonusEnabled', !bonusCfg.depositBonusEnabled)}
+                  className={`w-11 h-6 flex items-center rounded-full p-1 cursor-pointer transition shrink-0 ${
+                    bonusCfg.depositBonusEnabled ? 'bg-amber-500 justify-end' : 'bg-slate-700 justify-start'
+                  }`}
+                >
+                  <div className="bg-white w-4 h-4 rounded-full shadow" />
+                </button>
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold text-slate-300 mb-1">Extra Deposit Bonus Percentage (%):</label>
+                <input
+                  type="number"
+                  min="0"
+                  max="200"
+                  step="1"
+                  value={bonusCfg.depositBonusPercent}
+                  onChange={(e) => updateBonusField('depositBonusPercent', Math.max(0, Math.min(200, Number(e.target.value))))}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl py-2 px-3 text-sm text-amber-300 font-mono font-bold focus:border-amber-400 outline-none"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Weekly & Monthly Loyalty Bonuses */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Weekly Bonus */}
+            <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-sm font-black text-white flex items-center gap-1.5">
+                    <Flame className="w-4 h-4 text-amber-400" />
+                    <span>Weekly Free Bonus</span>
+                  </h4>
+                  <p className="text-[11px] text-slate-400">Claimable once every 7 days by deposited players</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => updateBonusField('weeklyBonusEnabled', !bonusCfg.weeklyBonusEnabled)}
+                  className={`w-11 h-6 flex items-center rounded-full p-1 cursor-pointer transition shrink-0 ${
+                    bonusCfg.weeklyBonusEnabled ? 'bg-emerald-500 justify-end' : 'bg-slate-700 justify-start'
+                  }`}
+                >
+                  <div className="bg-white w-4 h-4 rounded-full shadow" />
+                </button>
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold text-slate-300 mb-1">Weekly Bonus Amount ($ USD):</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.10"
+                  value={bonusCfg.weeklyBonusUSD}
+                  onChange={(e) => updateBonusField('weeklyBonusUSD', Math.max(0, Number(e.target.value)))}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl py-2 px-3 text-sm text-amber-300 font-mono font-bold focus:border-amber-400 outline-none"
+                />
+              </div>
+            </div>
+
+            {/* Monthly Bonus */}
+            <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-sm font-black text-white flex items-center gap-1.5">
+                    <Calendar className="w-4 h-4 text-emerald-400" />
+                    <span>Monthly Loyalty Bonus</span>
+                  </h4>
+                  <p className="text-[11px] text-slate-400">Claimable once every 30 days by deposited players</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => updateBonusField('monthlyBonusEnabled', !bonusCfg.monthlyBonusEnabled)}
+                  className={`w-11 h-6 flex items-center rounded-full p-1 cursor-pointer transition shrink-0 ${
+                    bonusCfg.monthlyBonusEnabled ? 'bg-emerald-500 justify-end' : 'bg-slate-700 justify-start'
+                  }`}
+                >
+                  <div className="bg-white w-4 h-4 rounded-full shadow" />
+                </button>
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold text-slate-300 mb-1">Monthly Bonus Amount ($ USD):</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.10"
+                  value={bonusCfg.monthlyBonusUSD}
+                  onChange={(e) => updateBonusField('monthlyBonusUSD', Math.max(0, Number(e.target.value)))}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl py-2 px-3 text-sm text-emerald-300 font-mono font-bold focus:border-emerald-400 outline-none"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Referral & Milestone Cash Bonuses */}
+          <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
+              <div>
+                <h4 className="text-sm font-black text-amber-300 flex items-center gap-1.5">
+                  <Award className="w-4 h-4 text-amber-400" />
+                  <span>Referral Rewards & Milestone Cash Bonuses</span>
+                </h4>
+                <p className="text-[11px] text-slate-400">
+                  Set per-friend referral reward and extra cash milestones (5, 10, 20, 50, 100 invited friends)
+                </p>
+              </div>
+              <div className="flex items-center gap-4 text-xs">
+                <label className="flex items-center gap-2 cursor-pointer text-slate-300 font-bold">
+                  <input
+                    type="checkbox"
+                    checked={bonusCfg.referralBonusEnabled}
+                    onChange={(e) => updateBonusField('referralBonusEnabled', e.target.checked)}
+                    className="rounded accent-amber-500"
+                  />
+                  <span>Per-Friend Active</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer text-slate-300 font-bold">
+                  <input
+                    type="checkbox"
+                    checked={bonusCfg.referralMilestonesEnabled}
+                    onChange={(e) => updateBonusField('referralMilestonesEnabled', e.target.checked)}
+                    className="rounded accent-emerald-500"
+                  />
+                  <span>Milestones Active</span>
+                </label>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Per Friend ($)</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.10"
+                  value={bonusCfg.referralBonusUSD}
+                  onChange={(e) => updateBonusField('referralBonusUSD', Math.max(0, Number(e.target.value)))}
+                  className="w-full bg-slate-900 border border-amber-500/40 rounded-xl py-2 px-2.5 text-sm text-amber-300 font-mono font-bold focus:border-amber-400 outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">5 Friends ($)</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.10"
+                  value={bonusCfg.referralMilestone5USD}
+                  onChange={(e) => updateBonusField('referralMilestone5USD', Math.max(0, Number(e.target.value)))}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl py-2 px-2.5 text-sm text-white font-mono font-bold focus:border-emerald-400 outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">10 Friends ($)</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.10"
+                  value={bonusCfg.referralMilestone10USD}
+                  onChange={(e) => updateBonusField('referralMilestone10USD', Math.max(0, Number(e.target.value)))}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl py-2 px-2.5 text-sm text-white font-mono font-bold focus:border-emerald-400 outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">20 Friends ($)</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.50"
+                  value={bonusCfg.referralMilestone20USD}
+                  onChange={(e) => updateBonusField('referralMilestone20USD', Math.max(0, Number(e.target.value)))}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl py-2 px-2.5 text-sm text-white font-mono font-bold focus:border-emerald-400 outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">50 Friends ($)</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.50"
+                  value={bonusCfg.referralMilestone50USD}
+                  onChange={(e) => updateBonusField('referralMilestone50USD', Math.max(0, Number(e.target.value)))}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl py-2 px-2.5 text-sm text-white font-mono font-bold focus:border-emerald-400 outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">100 Friends ($)</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="1.00"
+                  value={bonusCfg.referralMilestone100USD}
+                  onChange={(e) => updateBonusField('referralMilestone100USD', Math.max(0, Number(e.target.value)))}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl py-2 px-2.5 text-sm text-white font-mono font-bold focus:border-emerald-400 outline-none"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Optional Promo Headline */}
+          <div>
+            <label className="block text-xs font-bold text-slate-300 mb-1">
+              Optional Promotional Bonus Banner Note (Shown to Players):
+            </label>
+            <input
+              type="text"
+              placeholder="e.g. Weekend Mega Bonus Event: Claim extra rewards on every deposit!"
+              value={bonusCfg.customPromoText || ''}
+              onChange={(e) => updateBonusField('customPromoText', e.target.value)}
+              className="w-full bg-slate-950 border border-slate-700 rounded-xl py-2.5 px-3 text-xs text-white focus:border-amber-400 outline-none"
+            />
+          </div>
+
+          <div className="pt-2 flex justify-end">
+            <button
+              type="submit"
+              className="px-6 py-3 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-400 hover:from-amber-400 hover:to-yellow-300 text-slate-950 font-black text-xs sm:text-sm shadow-lg flex items-center gap-2 transition cursor-pointer"
+            >
+              <Save className="w-4 h-4" />
+              <span>Save All Bonus Offers</span>
+            </button>
+          </div>
+        </form>
+      )}
+
+      {/* Tab 4: QUICK NOTICES & ANNOUNCEMENT BOARD */}
       {activeTab === 'NOTICES' && (
         <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 sm:p-6 shadow-xl space-y-6">
           <div className="flex items-center justify-between pb-4 border-b border-slate-800">
@@ -1345,14 +1751,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         </form>
       )}
 
-      {/* Tab 4: USERS & BALANCE MANAGEMENT */}
+      {/* Tab 6: USERS & BALANCE MANAGEMENT */}
       {activeTab === 'USERS' && (
         <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-xl space-y-4">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <div>
-              <h3 className="text-base font-black text-white">Player Wallets & Balances ($ USD)</h3>
+              <h3 className="text-base font-black text-white">Player Wallets, Balances & Custom Bonuses ($ USD)</h3>
               <p className="text-xs text-slate-400">
-                Adjust or top-up any player balance directly
+                Adjust any player balance, inspect locked bonus wagering, or grant an instant special bonus
               </p>
             </div>
             <div className="relative w-full sm:w-64">
@@ -1367,6 +1773,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             </div>
           </div>
 
+          {bonusGrantedBanner && (
+            <div className="p-3 rounded-2xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-xs font-bold">
+              ✓ {bonusGrantedBanner}
+            </div>
+          )}
+
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
@@ -1375,6 +1787,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   <th className="py-3 px-3">Status</th>
                   <th className="py-3 px-3">Role</th>
                   <th className="py-3 px-3">Balance ($ USD)</th>
+                  <th className="py-3 px-3">Locked Bonus</th>
                   <th className="py-3 px-3">Binance ID</th>
                   <th className="py-3 px-3 text-right">Account Actions</th>
                 </tr>
@@ -1412,6 +1825,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       <td className="py-3 px-3 font-mono font-bold text-amber-300 text-sm">
                         ${usr.walletBalance.toFixed(2)} USD
                       </td>
+                      <td className="py-3 px-3 font-mono font-bold text-emerald-300 text-xs">
+                        ${(usr.lockedBonusBalance || 0).toFixed(2)}
+                      </td>
                       <td className="py-3 px-3 font-mono text-slate-400 text-xs">
                         {usr.binancePayId || 'Not set'}
                       </td>
@@ -1436,6 +1852,45 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                             </button>
                             <button
                               onClick={() => setEditingUserId(null)}
+                              className="px-2 py-1 bg-slate-800 text-slate-400 rounded-lg text-xs cursor-pointer"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ) : grantBonusUserId === usr.id ? (
+                          <div className="flex flex-wrap items-center justify-end gap-1">
+                            <input
+                              type="number"
+                              min="0.10"
+                              step="0.10"
+                              value={grantBonusAmount}
+                              onChange={(e) => setGrantBonusAmount(Number(e.target.value))}
+                              placeholder="$ Bonus"
+                              className="w-20 bg-slate-950 border border-emerald-400 rounded-lg px-2 py-1 text-xs text-emerald-300 font-mono"
+                            />
+                            <input
+                              type="text"
+                              value={grantBonusNote}
+                              onChange={(e) => setGrantBonusNote(e.target.value)}
+                              placeholder="Note (optional)"
+                              className="w-28 bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-xs text-white"
+                            />
+                            <button
+                              onClick={async () => {
+                                if (grantBonusAmount > 0 && onGrantUserBonus) {
+                                  await onGrantUserBonus(usr.id, Number(grantBonusAmount.toFixed(2)), grantBonusNote.trim() || undefined);
+                                  setBonusGrantedBanner(`Credited $${grantBonusAmount.toFixed(2)} bonus to ${usr.name}!`);
+                                  setTimeout(() => setBonusGrantedBanner(null), 3500);
+                                }
+                                setGrantBonusUserId(null);
+                                setGrantBonusNote('');
+                              }}
+                              className="px-2 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold cursor-pointer"
+                            >
+                              Send
+                            </button>
+                            <button
+                              onClick={() => setGrantBonusUserId(null)}
                               className="px-2 py-1 bg-slate-800 text-slate-400 rounded-lg text-xs cursor-pointer"
                             >
                               Cancel
@@ -1466,8 +1921,23 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                                 )}
                               </button>
                             )}
+                            {onGrantUserBonus && (
+                              <button
+                                onClick={() => {
+                                  setEditingUserId(null);
+                                  setGrantBonusUserId(usr.id);
+                                  setGrantBonusAmount(1.00);
+                                  setGrantBonusNote('');
+                                }}
+                                className="px-2.5 py-1 rounded bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-xs font-bold cursor-pointer flex items-center gap-1"
+                              >
+                                <Gift className="w-3 h-3" />
+                                <span>+ Bonus</span>
+                              </button>
+                            )}
                             <button
                               onClick={() => {
+                                setGrantBonusUserId(null);
                                 setEditingUserId(usr.id);
                                 setAdjustAmount(usr.walletBalance);
                               }}

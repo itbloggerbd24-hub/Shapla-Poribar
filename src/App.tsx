@@ -13,6 +13,7 @@ import {
 } from './types/game';
 import { 
   DEFAULT_ADMIN_SETTINGS, 
+  DEFAULT_BONUS_CONFIG,
   sanitizeAdminSettings,
   INITIAL_USER, 
   INITIAL_ADMIN,
@@ -191,6 +192,32 @@ export default function App() {
     });
   }, [currentUser?.id]);
 
+  const handleUpdateSettings = async (newSettings: AdminSettings) => {
+    const sanitized = sanitizeAdminSettings(newSettings);
+    setAdminSettings(sanitized);
+    saveToStorage('admin_settings_usd', sanitized);
+    await authApi.updateSettings(sanitized);
+  };
+
+  const handleGrantUserBonus = async (userId: string, amountUSD: number, note?: string) => {
+    const res = await authApi.grantUserBonus(userId, amountUSD, note);
+    if (res.success && res.user) {
+      setAllUsers((prev) => prev.map((u) => (u.id === res.user!.id ? res.user! : u)));
+      if (user.id === res.user.id) {
+        setUser(res.user);
+        saveToStorage('active_user_session', res.user);
+      }
+      if (currentUser && currentUser.id === res.user.id) {
+        setCurrentUser(res.user);
+      }
+      authApi.fetchNotifications(user.id).then((notifs) => {
+        if (notifs) setNotifications(notifs);
+      });
+      return true;
+    }
+    return false;
+  };
+
   const handlePublishNotice = async (title: string, message: string, badge?: string) => {
     const res = await authApi.publishNotification({
       title,
@@ -275,11 +302,16 @@ export default function App() {
     deposits.some((d) => d.userId === user?.id && d.status === 'APPROVED')
   );
 
-  // Claim Weekly Free Bonus ($0.50 USD every 7 days) - Persists on server and local
+  // Claim Weekly Free Bonus (uses Admin bonusConfig every 7 days) - Persists on server and local
   const handleClaimWeekly = async () => {
     if (!userHasApprovedDeposit) {
       setIsRewardsOpen(false);
       setIsDepositOpen(true);
+      return;
+    }
+
+    const bonusCfg = { ...DEFAULT_BONUS_CONFIG, ...(adminSettings.bonusConfig || {}) };
+    if (!bonusCfg.bonusesEnabled || !bonusCfg.weeklyBonusEnabled || Number(bonusCfg.weeklyBonusUSD) <= 0) {
       return;
     }
 
@@ -292,12 +324,16 @@ export default function App() {
         setAllUsers((prev) => prev.map((u) => (u.id === res.user!.id ? res.user! : u)));
         return;
       }
+      if (res.error && !res.error.includes('Network')) {
+        return;
+      }
     }
+    const weeklyAmt = Number(bonusCfg.weeklyBonusUSD ?? 0.50);
     setUser((u) => {
       const next = {
         ...u,
-        walletBalance: Number((u.walletBalance + 0.50).toFixed(2)),
-        lockedBonusBalance: Number(((u.lockedBonusBalance || 0) + 0.50).toFixed(2)),
+        walletBalance: Number((u.walletBalance + weeklyAmt).toFixed(2)),
+        lockedBonusBalance: Number(((u.lockedBonusBalance || 0) + weeklyAmt).toFixed(2)),
         lastWeeklyClaim: Date.now(),
       };
       saveToStorage('active_user_session', next);
@@ -305,11 +341,16 @@ export default function App() {
     });
   };
 
-  // Claim Monthly Free Loyalty Bonus ($1.00 USD every 30 days) - Persists on server and local
+  // Claim Monthly Free Loyalty Bonus (uses Admin bonusConfig every 30 days) - Persists on server and local
   const handleClaimMonthly = async () => {
     if (!userHasApprovedDeposit) {
       setIsRewardsOpen(false);
       setIsDepositOpen(true);
+      return;
+    }
+
+    const bonusCfg = { ...DEFAULT_BONUS_CONFIG, ...(adminSettings.bonusConfig || {}) };
+    if (!bonusCfg.bonusesEnabled || !bonusCfg.monthlyBonusEnabled || Number(bonusCfg.monthlyBonusUSD) <= 0) {
       return;
     }
 
@@ -322,12 +363,16 @@ export default function App() {
         setAllUsers((prev) => prev.map((u) => (u.id === res.user!.id ? res.user! : u)));
         return;
       }
+      if (res.error && !res.error.includes('Network')) {
+        return;
+      }
     }
+    const monthlyAmt = Number(bonusCfg.monthlyBonusUSD ?? 1.00);
     setUser((u) => {
       const next = {
         ...u,
-        walletBalance: Number((u.walletBalance + 1.00).toFixed(2)),
-        lockedBonusBalance: Number(((u.lockedBonusBalance || 0) + 1.00).toFixed(2)),
+        walletBalance: Number((u.walletBalance + monthlyAmt).toFixed(2)),
+        lockedBonusBalance: Number(((u.lockedBonusBalance || 0) + monthlyAmt).toFixed(2)),
         lastMonthlyClaim: Date.now(),
       };
       saveToStorage('active_user_session', next);
@@ -872,6 +917,38 @@ export default function App() {
     (b) => b.roundId === currentRound.id && b.userId === user.id
   );
 
+  // 0. If logged into Admin Console: render strictly Admin Panel ONLY (zero main website elements)
+  if (isAdminView) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 p-3 sm:p-6 font-['Plus_Jakarta_Sans',sans-serif]">
+        <AdminPanel
+          settings={adminSettings}
+          onUpdateSettings={handleUpdateSettings}
+          deposits={deposits}
+          onApproveDeposit={handleApproveDeposit}
+          onRejectDeposit={handleRejectDeposit}
+          withdrawals={withdrawals}
+          onApproveWithdrawal={handleApproveWithdrawal}
+          onRejectWithdrawal={handleRejectWithdrawal}
+          roundsHistory={roundsHistory}
+          currentRound={currentRound}
+          users={allUsers}
+          onAdjustUserBalance={handleAdjustUserBalance}
+          onGrantUserBonus={handleGrantUserBonus}
+          onToggleSuspendUser={handleToggleSuspendUser}
+          onPublishNotice={handlePublishNotice}
+          allBets={allBets}
+          onCloseAdmin={() => {
+            setIsAdminView(false);
+            if (window.location.hash === '##admin' || window.location.hash === '#admin') {
+              window.history.pushState('', document.title, window.location.pathname + window.location.search);
+            }
+          }}
+        />
+      </div>
+    );
+  }
+
   // 1. If not logged in and not admin view: show AuthPage (Login/Register/Forgot)
   if (!currentUser && !isAdminView) {
     return (
@@ -879,6 +956,7 @@ export default function App() {
         <AuthPage
           onLoginSuccess={handleLoginSuccess}
           onLogoSecretClick={handleLogoClick}
+          adminSettings={adminSettings}
         />
 
         {/* Secret Admin Pin Modal if triggered on Auth Page */}
@@ -978,6 +1056,7 @@ export default function App() {
       {/* Header (Quick Notification Icon replaces sound on header bar) */}
       <Header
         user={user}
+        adminSettings={adminSettings}
         onOpenDeposit={() => {
           setIsNotificationOpen(false);
           setIsWithdrawOpen(false);
@@ -1168,32 +1247,7 @@ export default function App() {
 
       {/* Main Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-2 sm:p-4 space-y-3 sm:space-y-6">
-        {isAdminView ? (
-          /* Secret Admin View */
-          <AdminPanel
-            settings={adminSettings}
-            onUpdateSettings={setAdminSettings}
-            deposits={deposits}
-            onApproveDeposit={handleApproveDeposit}
-            onRejectDeposit={handleRejectDeposit}
-            withdrawals={withdrawals}
-            onApproveWithdrawal={handleApproveWithdrawal}
-            onRejectWithdrawal={handleRejectWithdrawal}
-            roundsHistory={roundsHistory}
-            currentRound={currentRound}
-            users={allUsers}
-            onAdjustUserBalance={handleAdjustUserBalance}
-            onToggleSuspendUser={handleToggleSuspendUser}
-            onPublishNotice={handlePublishNotice}
-            allBets={allBets}
-            onCloseAdmin={() => {
-              setIsAdminView(false);
-              if (window.location.hash === '##admin') {
-                window.history.pushState('', document.title, window.location.pathname);
-              }
-            }}
-          />
-        ) : isWalletHistoryOpen ? (
+        {isWalletHistoryOpen ? (
           /* Dedicated Full Page Wallet History View */
           <WalletHistoryModal
             isOpen={true}
@@ -1255,6 +1309,7 @@ export default function App() {
             isOpen={true}
             onClose={() => setIsReferralOpen(false)}
             user={user}
+            adminSettings={adminSettings}
           />
         ) : isRewardsOpen ? (
           /* Dedicated Full Page Daily Rewards View */
@@ -1262,6 +1317,7 @@ export default function App() {
             isOpen={true}
             onClose={() => setIsRewardsOpen(false)}
             user={user}
+            adminSettings={adminSettings}
             hasDeposited={userHasApprovedDeposit}
             onOpenDeposit={() => {
               setIsRewardsOpen(false);

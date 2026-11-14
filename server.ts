@@ -131,7 +131,35 @@ async function startServer() {
     writeDb(db);
   };
 
-  // Ensure initial data such as demo account 01883239867
+  // Default dynamic bonus configuration (editable from Admin Panel)
+  const DEFAULT_BONUS_CONFIG = {
+    bonusesEnabled: true,
+    minDepositForBonusUSD: 5.00,
+    welcomeBonusEnabled: true,
+    welcomeBonusUSD: 1.00,
+    depositBonusEnabled: false,
+    depositBonusPercent: 0,
+    weeklyBonusEnabled: true,
+    weeklyBonusUSD: 0.50,
+    monthlyBonusEnabled: true,
+    monthlyBonusUSD: 1.00,
+    referralBonusEnabled: true,
+    referralBonusUSD: 0.50,
+    referralMilestonesEnabled: true,
+    referralMilestone5USD: 0.50,
+    referralMilestone10USD: 1.00,
+    referralMilestone20USD: 3.00,
+    referralMilestone50USD: 5.00,
+    referralMilestone100USD: 10.00,
+    customPromoText: '',
+  };
+
+  const getBonusConfig = (db: any) => ({
+    ...DEFAULT_BONUS_CONFIG,
+    ...(db?.settings?.bonusConfig || {}),
+  });
+
+  // Ensure initial data such as demo account 01883239867 & default bonusConfig
   const ensureInitialData = () => {
     try {
       const db = readDb();
@@ -144,6 +172,20 @@ async function startServer() {
       if (!db.verificationCodes) {
         db.verificationCodes = {};
         changed = true;
+      }
+      if (!db.settings) {
+        db.settings = {};
+        changed = true;
+      }
+      if (!db.settings.bonusConfig) {
+        db.settings.bonusConfig = { ...DEFAULT_BONUS_CONFIG };
+        changed = true;
+      } else {
+        const mergedBonus = { ...DEFAULT_BONUS_CONFIG, ...db.settings.bonusConfig };
+        if (JSON.stringify(mergedBonus) !== JSON.stringify(db.settings.bonusConfig)) {
+          db.settings.bonusConfig = mergedBonus;
+          changed = true;
+        }
       }
 
       // Demo test user requested by user: 01883239867 / 635366
@@ -376,13 +418,20 @@ async function startServer() {
         delete db.verificationCodes[cleanPhone];
       }
 
-      // Add a welcome notification
+      // Add a welcome notification using live Admin bonus settings
+      const bonusCfg = getBonusConfig(db);
+      const minDep = Number(bonusCfg.minDepositForBonusUSD ?? 5.00);
+      const welcomeAmt = Number(bonusCfg.welcomeBonusUSD ?? 1.00);
+      const welcomeMessage = (bonusCfg.bonusesEnabled && bonusCfg.welcomeBonusEnabled && welcomeAmt > 0)
+        ? `Your account has been successfully created and verified with NID. Complete your 1st deposit (min $${minDep.toFixed(2)}) to receive your $${welcomeAmt.toFixed(2)} welcome signup bonus!`
+        : 'Your account has been successfully created and verified with NID. Deposit funds via Binance Pay or USDT to start playing!';
+
       if (!db.notifications) db.notifications = [];
       db.notifications.unshift({
         id: `notif_${Date.now()}_welcome`,
         userId: newUser.id,
         title: '🎉 Welcome to Shapla Poribar!',
-        message: 'Your account has been successfully created and verified with NID. Complete your 1st deposit (min $5.00) to receive your $1.00 welcome signup bonus!',
+        message: welcomeMessage,
         type: 'SYSTEM',
         badge: 'WELCOME',
         isRead: false,
@@ -711,12 +760,60 @@ async function startServer() {
     }
   });
 
-  // 7. USER: Claim Daily ($0.50) or Weekly ($1.00) Free Bonus (Persistent on disk)
+  // 6b. ADMIN: Directly grant a custom bonus amount to a user
+  app.post('/api/users/:id/grant-bonus', (req, res) => {
+    try {
+      const { id } = req.params;
+      const { amountUSD, note } = req.body;
+      const amount = Number(Number(amountUSD).toFixed(2));
+      if (!amount || amount <= 0) {
+        return res.status(400).json({ error: 'Bonus amount must be greater than $0.00.' });
+      }
+
+      const db = readDb();
+      const userIndex = db.users.findIndex((u: any) => u.id === id);
+      if (userIndex === -1) {
+        return res.status(404).json({ error: 'User not found.' });
+      }
+
+      const user = db.users[userIndex];
+      db.users[userIndex].walletBalance = Number(((user.walletBalance || 0) + amount).toFixed(2));
+      db.users[userIndex].lockedBonusBalance = Number(((user.lockedBonusBalance || 0) + amount).toFixed(2));
+
+      if (!db.notifications) db.notifications = [];
+      db.notifications.unshift({
+        id: `notif_${Date.now()}_admin_bonus_${user.id}`,
+        userId: user.id,
+        title: `🎁 Special Bonus Received (+$${amount.toFixed(2)})!`,
+        message: note && String(note).trim()
+          ? `${String(note).trim()} ($${amount.toFixed(2)} USD added to your playable bonus balance)`
+          : `Administration credited a special $${amount.toFixed(2)} USD bonus to your wallet! Wager it in predictions to unlock withdrawals.`,
+        type: 'SIGNUP_BONUS',
+        badge: 'BONUS',
+        isRead: false,
+        createdAt: Date.now(),
+      });
+
+      writeDb(db);
+      const { password: _, ...userSafe } = db.users[userIndex];
+      return res.json({ success: true, user: userSafe, bonusAdded: amount });
+    } catch (err: any) {
+      console.error('Grant bonus error:', err);
+      return res.status(500).json({ error: 'Failed to grant bonus.' });
+    }
+  });
+
+  // 7. USER: Claim Weekly or Monthly Free Bonus (Uses Admin bonusConfig, persistent on disk)
   app.post('/api/users/:id/claim-bonus', (req, res) => {
     try {
       const { id } = req.params;
-      const { type } = req.body; // 'daily' | 'weekly'
+      const { type } = req.body; // 'weekly' | 'monthly' | 'daily'
       const db = readDb();
+      const bonusCfg = getBonusConfig(db);
+
+      if (!bonusCfg.bonusesEnabled) {
+        return res.status(400).json({ error: 'Bonus offers are currently paused by administration.' });
+      }
 
       const userIndex = db.users.findIndex((u: any) => u.id === id);
       if (userIndex === -1) {
@@ -727,6 +824,7 @@ async function startServer() {
       const user = db.users[userIndex];
       const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
       const ONE_MONTH_MS = 30 * 24 * 60 * 60 * 1000;
+      const minDep = Number(bonusCfg.minDepositForBonusUSD ?? 5.00);
 
       // All bonuses work only after first deposit has been approved
       const userHasDeposited = Boolean(
@@ -736,24 +834,30 @@ async function startServer() {
 
       if (!userHasDeposited) {
         return res.status(400).json({ 
-          error: 'All bonuses unlock only after your 1st approved deposit (min $5.00 USD).' 
+          error: `All bonuses unlock only after your 1st approved deposit (min $${minDep.toFixed(2)} USD).` 
         });
       }
 
       let bonusAmount = 0;
       if (type === 'weekly' || type === 'daily') {
+        if (!bonusCfg.weeklyBonusEnabled || Number(bonusCfg.weeklyBonusUSD) <= 0) {
+          return res.status(400).json({ error: 'Weekly bonus is currently disabled by administration.' });
+        }
         const lastWeekly = user.lastWeeklyClaim || 0;
         if (now - lastWeekly < ONE_WEEK_MS) {
           return res.status(400).json({ error: 'Weekly bonus can only be claimed once every 7 days.' });
         }
-        bonusAmount = 0.50;
+        bonusAmount = Number(Number(bonusCfg.weeklyBonusUSD).toFixed(2));
         db.users[userIndex].lastWeeklyClaim = now;
       } else if (type === 'monthly') {
+        if (!bonusCfg.monthlyBonusEnabled || Number(bonusCfg.monthlyBonusUSD) <= 0) {
+          return res.status(400).json({ error: 'Monthly loyalty bonus is currently disabled by administration.' });
+        }
         const lastMonthly = user.lastMonthlyClaim || 0;
         if (now - lastMonthly < ONE_MONTH_MS) {
           return res.status(400).json({ error: 'Monthly bonus can only be claimed once every 30 days.' });
         }
-        bonusAmount = 1.00;
+        bonusAmount = Number(Number(bonusCfg.monthlyBonusUSD).toFixed(2));
         db.users[userIndex].lastMonthlyClaim = now;
       } else {
         return res.status(400).json({ error: 'Invalid bonus type. Use weekly or monthly.' });
@@ -781,7 +885,7 @@ async function startServer() {
     }
   });
 
-  // Helper to approve deposit and unlock welcome signup bonus & referral bonus
+  // Helper to approve deposit and unlock dynamic welcome signup bonus, deposit %, & referral bonuses
   const approveDepositAndTriggerBonuses = (db: any, deposit: any) => {
     if (!deposit || deposit.status === 'APPROVED') return null;
 
@@ -791,20 +895,49 @@ async function startServer() {
     const userIndex = db.users.findIndex((u: any) => u.id === deposit.userId);
     if (userIndex === -1) return null;
 
+    const bonusCfg = getBonusConfig(db);
+    const minDep = Number(bonusCfg.minDepositForBonusUSD ?? 5.00);
     const user = db.users[userIndex];
     const isFirstDeposit = !user.firstDepositDone;
     let creditAmount = deposit.amountUSD;
+    let totalLockedBonusAdded = 0;
 
     if (!db.notifications) db.notifications = [];
 
+    // Optional % deposit promo bonus on eligible deposits (first or recurring)
+    let depositPctBonus = 0;
+    if (
+      bonusCfg.bonusesEnabled &&
+      bonusCfg.depositBonusEnabled &&
+      Number(bonusCfg.depositBonusPercent) > 0 &&
+      deposit.amountUSD >= minDep
+    ) {
+      depositPctBonus = Number((deposit.amountUSD * (Number(bonusCfg.depositBonusPercent) / 100)).toFixed(2));
+      if (depositPctBonus > 0) {
+        creditAmount += depositPctBonus;
+        totalLockedBonusAdded += depositPctBonus;
+      }
+    }
+
     if (isFirstDeposit) {
       user.firstDepositDone = true;
-      const welcomeBonus = 1.00; // $1.00 welcome signup bonus upon first deposit
-      creditAmount += welcomeBonus;
+
+      let welcomeBonus = 0;
+      if (
+        bonusCfg.bonusesEnabled &&
+        bonusCfg.welcomeBonusEnabled &&
+        Number(bonusCfg.welcomeBonusUSD) > 0 &&
+        deposit.amountUSD >= minDep
+      ) {
+        welcomeBonus = Number(Number(bonusCfg.welcomeBonusUSD).toFixed(2));
+        creditAmount += welcomeBonus;
+        totalLockedBonusAdded += welcomeBonus;
+      }
 
       // Unlock any pending referral bonuses accumulated before 1st deposit
       if (user.pendingReferralBonus && user.pendingReferralBonus > 0) {
         creditAmount += user.pendingReferralBonus;
+        totalLockedBonusAdded += user.pendingReferralBonus;
         db.notifications.unshift({
           id: `notif_${Date.now()}_pending_ref_${user.id}`,
           userId: user.id,
@@ -819,19 +952,35 @@ async function startServer() {
       }
 
       // Add notification for the newly deposited user
-      db.notifications.unshift({
-        id: `notif_${Date.now()}_first_dep_${user.id}`,
-        userId: user.id,
-        title: '🎁 1st Deposit & $1.00 Signup Bonus!',
-        message: `Your deposit of $${deposit.amountUSD.toFixed(2)} was successful! A $1.00 welcome signup bonus has been credited to your wallet!`,
-        type: 'SIGNUP_BONUS',
-        badge: 'BONUS',
-        isRead: false,
-        createdAt: Date.now(),
-      });
+      if (welcomeBonus > 0 || depositPctBonus > 0) {
+        const bonusParts = [];
+        if (welcomeBonus > 0) bonusParts.push(`$${welcomeBonus.toFixed(2)} welcome signup bonus`);
+        if (depositPctBonus > 0) bonusParts.push(`$${depositPctBonus.toFixed(2)} (${bonusCfg.depositBonusPercent}%) deposit promo bonus`);
+        db.notifications.unshift({
+          id: `notif_${Date.now()}_first_dep_${user.id}`,
+          userId: user.id,
+          title: `🎁 1st Deposit & $${(welcomeBonus + depositPctBonus).toFixed(2)} Bonus!`,
+          message: `Your deposit of $${deposit.amountUSD.toFixed(2)} was successful! A ${bonusParts.join(' + ')} has been credited to your wallet!`,
+          type: 'SIGNUP_BONUS',
+          badge: 'BONUS',
+          isRead: false,
+          createdAt: Date.now(),
+        });
+      } else {
+        db.notifications.unshift({
+          id: `notif_${Date.now()}_first_dep_${user.id}`,
+          userId: user.id,
+          title: '✅ 1st Deposit Approved!',
+          message: `Your deposit of $${deposit.amountUSD.toFixed(2)} has been verified and credited to your wallet balance.`,
+          type: 'DEPOSIT_APPROVED',
+          badge: 'DEPOSIT',
+          isRead: false,
+          createdAt: Date.now(),
+        });
+      }
 
       // Credit the referrer if user was referred
-      if (user.referredBy) {
+      if (user.referredBy && bonusCfg.bonusesEnabled && bonusCfg.referralBonusEnabled) {
         const refUpper = String(user.referredBy).trim().toUpperCase();
         const referrerIdx = db.users.findIndex((u: any) => 
           (u.referralCode && u.referralCode.toUpperCase() === refUpper) ||
@@ -841,70 +990,90 @@ async function startServer() {
         if (referrerIdx !== -1) {
           const referrer = db.users[referrerIdx];
           const newCount = (referrer.referralCount || 0) + 1;
-          let bonusToAdd = 0.50; // $0.50 per active referral who deposits
+          let bonusToAdd = Number(bonusCfg.referralBonusUSD || 0);
 
-          if (newCount === 5) bonusToAdd += 0.50;
-          else if (newCount === 10) bonusToAdd += 1.00;
-          else if (newCount === 20) bonusToAdd += 3.00;
-          else if (newCount === 50) bonusToAdd += 5.00;
-          else if (newCount === 100) bonusToAdd += 10.00;
+          if (bonusCfg.referralMilestonesEnabled) {
+            if (newCount === 5) bonusToAdd += Number(bonusCfg.referralMilestone5USD || 0);
+            else if (newCount === 10) bonusToAdd += Number(bonusCfg.referralMilestone10USD || 0);
+            else if (newCount === 20) bonusToAdd += Number(bonusCfg.referralMilestone20USD || 0);
+            else if (newCount === 50) bonusToAdd += Number(bonusCfg.referralMilestone50USD || 0);
+            else if (newCount === 100) bonusToAdd += Number(bonusCfg.referralMilestone100USD || 0);
+          }
 
-          // Check if referrer has completed 1st deposit
-          const referrerHasDeposited = Boolean(
-            referrer.firstDepositDone ||
-            (db.deposits && db.deposits.some((d: any) => d.userId === referrer.id && d.status === 'APPROVED'))
-          );
+          bonusToAdd = Number(bonusToAdd.toFixed(2));
 
-          if (referrerHasDeposited) {
-            db.users[referrerIdx].walletBalance = Number(((referrer.walletBalance || 0) + bonusToAdd).toFixed(2));
-            db.users[referrerIdx].referralCount = newCount;
-            db.users[referrerIdx].referralBonusEarned = Number(((referrer.referralBonusEarned || 0) + bonusToAdd).toFixed(2));
+          if (bonusToAdd > 0) {
+            const referrerHasDeposited = Boolean(
+              referrer.firstDepositDone ||
+              (db.deposits && db.deposits.some((d: any) => d.userId === referrer.id && d.status === 'APPROVED'))
+            );
 
-            // Notification to the referrer
-            db.notifications.unshift({
-              id: `notif_${Date.now()}_ref_bonus_${referrer.id}`,
-              userId: referrer.id,
-              title: '🎉 Referral Bonus Received!',
-              message: `Your referred friend (${user.name}) completed their 1st deposit of $${deposit.amountUSD.toFixed(2)}! A referral reward of $${bonusToAdd.toFixed(2)} has been credited to your wallet.`,
-              type: 'REFERRAL_BONUS',
-              badge: 'REFERRAL',
-              isRead: false,
-              createdAt: Date.now(),
-            });
-          } else {
-            // Referrer has not deposited yet: hold in pending until they make 1st deposit
-            db.users[referrerIdx].pendingReferralBonus = Number(((referrer.pendingReferralBonus || 0) + bonusToAdd).toFixed(2));
-            db.users[referrerIdx].referralCount = newCount;
-            db.users[referrerIdx].referralBonusEarned = Number(((referrer.referralBonusEarned || 0) + bonusToAdd).toFixed(2));
+            if (referrerHasDeposited) {
+              db.users[referrerIdx].walletBalance = Number(((referrer.walletBalance || 0) + bonusToAdd).toFixed(2));
+              db.users[referrerIdx].lockedBonusBalance = Number(((referrer.lockedBonusBalance || 0) + bonusToAdd).toFixed(2));
+              db.users[referrerIdx].referralCount = newCount;
+              db.users[referrerIdx].referralBonusEarned = Number(((referrer.referralBonusEarned || 0) + bonusToAdd).toFixed(2));
 
-            db.notifications.unshift({
-              id: `notif_${Date.now()}_ref_pending_${referrer.id}`,
-              userId: referrer.id,
-              title: '🎁 Referral Bonus Waiting!',
-              message: `Your referred friend (${user.name}) completed their 1st deposit! Make your 1st deposit (min $5.00 USD) to unlock and receive your $${bonusToAdd.toFixed(2)} referral bonus!`,
-              type: 'REFERRAL_BONUS',
-              badge: 'REFERRAL',
-              isRead: false,
-              createdAt: Date.now(),
-            });
+              db.notifications.unshift({
+                id: `notif_${Date.now()}_ref_bonus_${referrer.id}`,
+                userId: referrer.id,
+                title: '🎉 Referral Bonus Received!',
+                message: `Your referred friend (${user.name}) completed their 1st deposit of $${deposit.amountUSD.toFixed(2)}! A referral reward of $${bonusToAdd.toFixed(2)} has been credited to your wallet.`,
+                type: 'REFERRAL_BONUS',
+                badge: 'REFERRAL',
+                isRead: false,
+                createdAt: Date.now(),
+              });
+            } else {
+              db.users[referrerIdx].pendingReferralBonus = Number(((referrer.pendingReferralBonus || 0) + bonusToAdd).toFixed(2));
+              db.users[referrerIdx].referralCount = newCount;
+              db.users[referrerIdx].referralBonusEarned = Number(((referrer.referralBonusEarned || 0) + bonusToAdd).toFixed(2));
+
+              db.notifications.unshift({
+                id: `notif_${Date.now()}_ref_pending_${referrer.id}`,
+                userId: referrer.id,
+                title: '🎁 Referral Bonus Waiting!',
+                message: `Your referred friend (${user.name}) completed their 1st deposit! Make your 1st deposit (min $${minDep.toFixed(2)} USD) to unlock and receive your $${bonusToAdd.toFixed(2)} referral bonus!`,
+                type: 'REFERRAL_BONUS',
+                badge: 'REFERRAL',
+                isRead: false,
+                createdAt: Date.now(),
+              });
+            }
           }
         }
       }
     } else {
-      // Regular deposit approved notification
-      db.notifications.unshift({
-        id: `notif_${Date.now()}_dep_${deposit.id}`,
-        userId: user.id,
-        title: '✅ Deposit Approved!',
-        message: `Your deposit of $${deposit.amountUSD.toFixed(2)} has been verified and credited to your wallet balance.`,
-        type: 'DEPOSIT_APPROVED',
-        badge: 'DEPOSIT',
-        isRead: false,
-        createdAt: Date.now(),
-      });
+      // Regular deposit approved notification (plus optional deposit % promo bonus)
+      if (depositPctBonus > 0) {
+        db.notifications.unshift({
+          id: `notif_${Date.now()}_dep_${deposit.id}`,
+          userId: user.id,
+          title: `✅ Deposit & +$${depositPctBonus.toFixed(2)} Promo Bonus!`,
+          message: `Your deposit of $${deposit.amountUSD.toFixed(2)} + $${depositPctBonus.toFixed(2)} (${bonusCfg.depositBonusPercent}% deposit bonus) has been credited to your wallet!`,
+          type: 'DEPOSIT_APPROVED',
+          badge: 'BONUS',
+          isRead: false,
+          createdAt: Date.now(),
+        });
+      } else {
+        db.notifications.unshift({
+          id: `notif_${Date.now()}_dep_${deposit.id}`,
+          userId: user.id,
+          title: '✅ Deposit Approved!',
+          message: `Your deposit of $${deposit.amountUSD.toFixed(2)} has been verified and credited to your wallet balance.`,
+          type: 'DEPOSIT_APPROVED',
+          badge: 'DEPOSIT',
+          isRead: false,
+          createdAt: Date.now(),
+        });
+      }
     }
 
     user.walletBalance = Number(((user.walletBalance || 0) + creditAmount).toFixed(2));
+    if (totalLockedBonusAdded > 0) {
+      user.lockedBonusBalance = Number(((user.lockedBonusBalance || 0) + totalLockedBonusAdded).toFixed(2));
+    }
     const { password: _, ...userSafe } = user;
     return userSafe;
   };
@@ -1186,12 +1355,19 @@ async function startServer() {
     }
   });
 
-  // 19. SETTINGS: Update admin settings
+  // 19. SETTINGS: Update admin settings (deep-merge bonusConfig)
   app.post('/api/settings', (req, res) => {
     try {
-      const newSettings = req.body;
+      const newSettings = req.body || {};
       const db = readDb();
-      db.settings = { ...(db.settings || {}), ...newSettings };
+      const prevBonusConfig = getBonusConfig(db);
+      db.settings = {
+        ...(db.settings || {}),
+        ...newSettings,
+        bonusConfig: newSettings.bonusConfig
+          ? { ...prevBonusConfig, ...newSettings.bonusConfig }
+          : prevBonusConfig,
+      };
       writeDb(db);
       return res.json({ success: true, settings: db.settings });
     } catch (err: any) {

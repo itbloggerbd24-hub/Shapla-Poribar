@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { UserProfile } from '../types/game';
+import { AdminSettings, UserProfile } from '../types/game';
+import { DEFAULT_BONUS_CONFIG } from '../utils/storage';
 import { 
   X, 
   Gift, 
@@ -19,6 +20,7 @@ interface DailyRewardsModalProps {
   isOpen: boolean;
   onClose: () => void;
   user: UserProfile;
+  adminSettings?: AdminSettings;
   onClaimWeekly: () => void;
   onClaimMonthly: () => void;
   onClaimDaily?: () => void;
@@ -33,6 +35,7 @@ export const DailyRewardsModal: React.FC<DailyRewardsModalProps> = ({
   isOpen,
   onClose,
   user,
+  adminSettings,
   onClaimWeekly,
   onClaimMonthly,
   hasDeposited,
@@ -48,14 +51,27 @@ export const DailyRewardsModal: React.FC<DailyRewardsModalProps> = ({
 
   if (!isOpen) return null;
 
+  const bonusCfg = {
+    ...DEFAULT_BONUS_CONFIG,
+    ...(adminSettings?.bonusConfig || {}),
+  };
+
+  const weeklyAmt = Number(bonusCfg.weeklyBonusUSD ?? 0.50);
+  const monthlyAmt = Number(bonusCfg.monthlyBonusUSD ?? 1.00);
+  const welcomeAmt = Number(bonusCfg.welcomeBonusUSD ?? 1.00);
+  const minDepAmt = Number(bonusCfg.minDepositForBonusUSD ?? adminSettings?.minDepositUSD ?? 5.00);
+
+  const isWeeklyActive = bonusCfg.bonusesEnabled && bonusCfg.weeklyBonusEnabled && weeklyAmt > 0;
+  const isMonthlyActive = bonusCfg.bonusesEnabled && bonusCfg.monthlyBonusEnabled && monthlyAmt > 0;
+
   // All bonuses work only after 1st deposit is approved
   const isDepositUnlocked = Boolean(hasDeposited ?? user.firstDepositDone);
 
   const lastWeekly = user.lastWeeklyClaim || 0;
   const lastMonthly = user.lastMonthlyClaim || 0;
 
-  const weeklyEligible = isDepositUnlocked && (now - lastWeekly) >= ONE_WEEK_MS;
-  const monthlyEligible = isDepositUnlocked && (now - lastMonthly) >= ONE_MONTH_MS;
+  const weeklyEligible = isWeeklyActive && isDepositUnlocked && (now - lastWeekly) >= ONE_WEEK_MS;
+  const monthlyEligible = isMonthlyActive && isDepositUnlocked && (now - lastMonthly) >= ONE_MONTH_MS;
 
   const weeklyRemainingMs = Math.max(0, ONE_WEEK_MS - (now - lastWeekly));
   const monthlyRemainingMs = Math.max(0, ONE_MONTH_MS - (now - lastMonthly));
@@ -137,6 +153,14 @@ export const DailyRewardsModal: React.FC<DailyRewardsModalProps> = ({
           </div>
         </div>
 
+        {/* Optional Admin Promo Banner */}
+        {bonusCfg.customPromoText && bonusCfg.customPromoText.trim() && (
+          <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-bold flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
+            <span>{bonusCfg.customPromoText}</span>
+          </div>
+        )}
+
         {/* 1st Deposit Locked Warning Banner */}
         {!isDepositUnlocked && (
           <div className="mt-4 p-3.5 rounded-2xl bg-gradient-to-r from-amber-500/15 via-rose-500/10 to-slate-950 border border-amber-500/40 flex items-start gap-3 shadow-md">
@@ -148,7 +172,8 @@ export const DailyRewardsModal: React.FC<DailyRewardsModalProps> = ({
                 <span>1st Deposit Required to Unlock Bonuses</span>
               </div>
               <p className="text-slate-300 text-[11px] mt-1 leading-relaxed">
-                All bonuses (Weekly $0.50 & Monthly $1.00 + $1.00 Signup Bonus) become active immediately after your 1st approved deposit (min $5.00 USD).
+                All bonuses (Weekly ${weeklyAmt.toFixed(2)} & Monthly ${monthlyAmt.toFixed(2)}
+                {bonusCfg.welcomeBonusEnabled && welcomeAmt > 0 ? ` + $${welcomeAmt.toFixed(2)} Signup Bonus` : ''}) become active immediately after your 1st approved deposit (min ${minDepAmt.toFixed(2)} USD).
               </p>
               {onOpenDeposit && (
                 <button
@@ -169,9 +194,9 @@ export const DailyRewardsModal: React.FC<DailyRewardsModalProps> = ({
 
         <div className="mt-4 space-y-4">
           
-          {/* Card 1: Weekly Free Bonus ($0.50 USD) */}
+          {/* Card 1: Weekly Free Bonus */}
           <div className={`p-4 rounded-2xl border transition ${
-            !isDepositUnlocked
+            !isWeeklyActive || !isDepositUnlocked
               ? 'bg-slate-950/60 border-slate-800 opacity-90'
               : weeklyEligible
               ? 'bg-gradient-to-br from-amber-500/15 via-slate-900 to-slate-950 border-amber-500/60 shadow-lg ring-1 ring-amber-500/30'
@@ -185,7 +210,11 @@ export const DailyRewardsModal: React.FC<DailyRewardsModalProps> = ({
                 <div>
                   <div className="flex items-center gap-1.5">
                     <h3 className="text-sm font-black text-white">Weekly Bonus</h3>
-                    {!isDepositUnlocked && (
+                    {!isWeeklyActive ? (
+                      <span className="px-1.5 py-0.5 rounded-md bg-slate-800 text-slate-400 text-[9px] font-bold">
+                        Paused by Admin
+                      </span>
+                    ) : !isDepositUnlocked && (
                       <span className="px-1.5 py-0.5 rounded-md bg-rose-500/20 text-rose-300 text-[9px] font-bold flex items-center gap-0.5">
                         <Lock className="w-2.5 h-2.5" /> Locked
                       </span>
@@ -195,7 +224,7 @@ export const DailyRewardsModal: React.FC<DailyRewardsModalProps> = ({
                 </div>
               </div>
               <div className="text-base font-black text-amber-300 font-mono">
-                +$0.50 USD
+                +${weeklyAmt.toFixed(2)} USD
               </div>
             </div>
 
@@ -203,7 +232,11 @@ export const DailyRewardsModal: React.FC<DailyRewardsModalProps> = ({
               Weekly free wagering credits credited directly to your playable balance.
             </p>
 
-            {!isDepositUnlocked ? (
+            {!isWeeklyActive ? (
+              <div className="w-full py-2.5 px-3 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 text-xs font-bold text-center">
+                Weekly bonus offer is currently paused by administration.
+              </div>
+            ) : !isDepositUnlocked ? (
               <button
                 type="button"
                 onClick={() => {
@@ -213,7 +246,7 @@ export const DailyRewardsModal: React.FC<DailyRewardsModalProps> = ({
                 className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-750 border border-amber-500/30 text-amber-300 font-bold text-xs shadow transition cursor-pointer flex items-center justify-center gap-1.5"
               >
                 <Lock className="w-3.5 h-3.5 text-amber-400" />
-                <span>Make 1st Deposit to Unlock ($0.50)</span>
+                <span>Make 1st Deposit to Unlock (${weeklyAmt.toFixed(2)})</span>
               </button>
             ) : weeklyEligible ? (
               <button
@@ -222,7 +255,7 @@ export const DailyRewardsModal: React.FC<DailyRewardsModalProps> = ({
                 className="w-full py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-400 hover:from-amber-400 hover:to-yellow-300 text-slate-950 font-black text-xs shadow-md transition transform active:scale-98 cursor-pointer flex items-center justify-center gap-1.5"
               >
                 <Sparkles className="w-4 h-4 text-slate-950" />
-                <span>Claim $0.50 Weekly Free Bonus</span>
+                <span>Claim ${weeklyAmt.toFixed(2)} Weekly Free Bonus</span>
               </button>
             ) : (
               <div className="w-full py-2 px-3 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 text-xs flex items-center justify-between font-mono">
@@ -236,9 +269,9 @@ export const DailyRewardsModal: React.FC<DailyRewardsModalProps> = ({
             )}
           </div>
 
-          {/* Card 2: Monthly Free Bonus ($1.00 USD) */}
+          {/* Card 2: Monthly Free Bonus */}
           <div className={`p-4 rounded-2xl border transition ${
-            !isDepositUnlocked
+            !isMonthlyActive || !isDepositUnlocked
               ? 'bg-slate-950/60 border-slate-800 opacity-90'
               : monthlyEligible
               ? 'bg-gradient-to-br from-emerald-500/15 via-slate-900 to-slate-950 border-emerald-500/60 shadow-lg ring-1 ring-emerald-500/30'
@@ -252,7 +285,11 @@ export const DailyRewardsModal: React.FC<DailyRewardsModalProps> = ({
                 <div>
                   <div className="flex items-center gap-1.5">
                     <h3 className="text-sm font-black text-white">Monthly Loyalty Bonus</h3>
-                    {!isDepositUnlocked && (
+                    {!isMonthlyActive ? (
+                      <span className="px-1.5 py-0.5 rounded-md bg-slate-800 text-slate-400 text-[9px] font-bold">
+                        Paused by Admin
+                      </span>
+                    ) : !isDepositUnlocked && (
                       <span className="px-1.5 py-0.5 rounded-md bg-rose-500/20 text-rose-300 text-[9px] font-bold flex items-center gap-0.5">
                         <Lock className="w-2.5 h-2.5" /> Locked
                       </span>
@@ -262,7 +299,7 @@ export const DailyRewardsModal: React.FC<DailyRewardsModalProps> = ({
                 </div>
               </div>
               <div className="text-base font-black text-emerald-400 font-mono">
-                +$1.00 USD
+                +${monthlyAmt.toFixed(2)} USD
               </div>
             </div>
 
@@ -270,7 +307,11 @@ export const DailyRewardsModal: React.FC<DailyRewardsModalProps> = ({
               Monthly loyalty gift accessible to all active players.
             </p>
 
-            {!isDepositUnlocked ? (
+            {!isMonthlyActive ? (
+              <div className="w-full py-2.5 px-3 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 text-xs font-bold text-center">
+                Monthly bonus offer is currently paused by administration.
+              </div>
+            ) : !isDepositUnlocked ? (
               <button
                 type="button"
                 onClick={() => {
@@ -280,7 +321,7 @@ export const DailyRewardsModal: React.FC<DailyRewardsModalProps> = ({
                 className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-750 border border-emerald-500/30 text-emerald-300 font-bold text-xs shadow transition cursor-pointer flex items-center justify-center gap-1.5"
               >
                 <Lock className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Make 1st Deposit to Unlock ($1.00)</span>
+                <span>Make 1st Deposit to Unlock (${monthlyAmt.toFixed(2)})</span>
               </button>
             ) : monthlyEligible ? (
               <button
@@ -289,7 +330,7 @@ export const DailyRewardsModal: React.FC<DailyRewardsModalProps> = ({
                 className="w-full py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs shadow-md transition transform active:scale-98 cursor-pointer flex items-center justify-center gap-1.5"
               >
                 <Sparkles className="w-4 h-4 text-white" />
-                <span>Claim $1.00 Monthly Bonus</span>
+                <span>Claim ${monthlyAmt.toFixed(2)} Monthly Bonus</span>
               </button>
             ) : (
               <div className="w-full py-2 px-3 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 text-xs flex items-center justify-between font-mono">

@@ -122,6 +122,28 @@ export interface WithdrawalRequest {
   updatedAt?: number;
 }
 
+export interface BonusConfig {
+  bonusesEnabled: boolean;
+  minDepositForBonusUSD: number;
+  welcomeBonusEnabled: boolean;
+  welcomeBonusUSD: number;
+  depositBonusEnabled: boolean;
+  depositBonusPercent: number;
+  weeklyBonusEnabled: boolean;
+  weeklyBonusUSD: number;
+  monthlyBonusEnabled: boolean;
+  monthlyBonusUSD: number;
+  referralBonusEnabled: boolean;
+  referralBonusUSD: number;
+  referralMilestonesEnabled: boolean;
+  referralMilestone5USD: number;
+  referralMilestone10USD: number;
+  referralMilestone20USD: number;
+  referralMilestone50USD: number;
+  referralMilestone100USD: number;
+  customPromoText?: string;
+}
+
 export interface AdminSettings {
   binancePayId: string;
   binancePayEmail: string;
@@ -140,6 +162,7 @@ export interface AdminSettings {
   supportPaymentMethods: SupportPaymentMethod[];
   supportContactWhatsapp?: string;
   supportContactTelegram?: string;
+  bonusConfig?: BonusConfig;
 }
 
 export interface RankedPlayer {

@@ -486,6 +486,24 @@ export const authApi = {
     }
   },
 
+  // Admin: Directly grant bonus funds to a user's wallet & locked bonus balance
+  async grantUserBonus(userId: string, amountUSD: number, note?: string): Promise<{ success: boolean; user?: UserProfile; error?: string }> {
+    try {
+      const res = await fetch(`${API_BASE}/users/${userId}/grant-bonus`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amountUSD, note }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        return { success: false, error: json.error || 'Failed to grant bonus' };
+      }
+      return { success: true, user: json.user };
+    } catch (e) {
+      return { success: false, error: 'Network error granting bonus' };
+    }
+  },
+
   // Deposits API
   async fetchDeposits(): Promise<any[]> {
     try {

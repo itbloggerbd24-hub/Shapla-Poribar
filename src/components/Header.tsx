@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { UserProfile } from '../types/game';
+import { AdminSettings, UserProfile } from '../types/game';
+import { DEFAULT_BONUS_CONFIG } from '../utils/storage';
 import { 
   Wallet, 
   ArrowDownCircle, 
@@ -26,6 +27,7 @@ import {
 
 interface HeaderProps {
   user: UserProfile;
+  adminSettings?: AdminSettings;
   onOpenDeposit: () => void;
   onOpenWithdraw: () => void;
   onOpenRules: () => void;
@@ -47,6 +49,7 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({
   user,
+  adminSettings,
   onOpenDeposit,
   onOpenWithdraw,
   onOpenRules,
@@ -67,6 +70,14 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isBalanceMenuOpen, setIsBalanceMenuOpen] = useState(false);
+
+  const bonusCfg = {
+    ...DEFAULT_BONUS_CONFIG,
+    ...(adminSettings?.bonusConfig || {}),
+  };
+  const refBonus = Number(bonusCfg.referralBonusUSD ?? 0.50);
+  const weeklyBonus = Number(bonusCfg.weeklyBonusUSD ?? 0.50);
+  const monthlyBonus = Number(bonusCfg.monthlyBonusUSD ?? 1.00);
 
   return (
     <>
@@ -217,7 +228,7 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 onClick={onOpenReferral}
                 className="hidden lg:flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gradient-to-r from-amber-500/10 to-yellow-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 font-bold text-xs transition cursor-pointer"
-                title="Refer Friends & Earn $0.50 Each"
+                title={`Refer Friends & Earn $${refBonus.toFixed(2)} Each`}
               >
                 <Gift className="w-3.5 h-3.5 text-amber-400" />
                 <span>Refer & Earn</span>
@@ -229,7 +240,7 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 onClick={onOpenRewards}
                 className="hidden lg:flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gradient-to-r from-emerald-500/10 to-teal-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 font-bold text-xs transition cursor-pointer"
-                title="Claim Free Weekly ($0.50) & Monthly ($1.00) Bonus"
+                title={`Claim Free Weekly ($${weeklyBonus.toFixed(2)}) & Monthly ($${monthlyBonus.toFixed(2)}) Bonus`}
               >
                 <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
                 <span>Weekly/Monthly Bonus</span>
@@ -519,7 +530,7 @@ export const Header: React.FC<HeaderProps> = ({
                       <span className="font-bold">Refer & Earn</span>
                     </div>
                     <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-300 font-bold">
-                      +$0.50
+                      +${refBonus.toFixed(2)}
                     </span>
                   </button>
                 )}

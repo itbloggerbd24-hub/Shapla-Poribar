@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { UserProfile } from '../types/game';
+import { AdminSettings, UserProfile } from '../types/game';
+import { DEFAULT_BONUS_CONFIG } from '../utils/storage';
 import { authApi, normalizePhone } from '../utils/authApi';
 import { 
   Coins, 
@@ -26,6 +27,7 @@ import {
 interface AuthPageProps {
   onLoginSuccess: (user: UserProfile) => void;
   onLogoSecretClick?: () => void;
+  adminSettings?: AdminSettings;
 }
 
 const SECURITY_QUESTIONS = [
@@ -39,8 +41,15 @@ const SECURITY_QUESTIONS = [
 
 export const AuthPage: React.FC<AuthPageProps> = ({ 
   onLoginSuccess,
-  onLogoSecretClick
+  onLogoSecretClick,
+  adminSettings
 }) => {
+  const bonusCfg = {
+    ...DEFAULT_BONUS_CONFIG,
+    ...(adminSettings?.bonusConfig || {}),
+  };
+  const welcomeAmt = Number(bonusCfg.welcomeBonusUSD ?? 1.00);
+  const showWelcomeBonusLabel = bonusCfg.bonusesEnabled && bonusCfg.welcomeBonusEnabled && welcomeAmt > 0;
   const [tab, setTab] = useState<'LOGIN' | 'REGISTER' | 'FORGOT'>('LOGIN');
 
   // Login states
@@ -704,7 +713,11 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                   <span>Creating Account...</span>
                 ) : (
                   <>
-                    <span>Create Account ($1.00 Welcome Bonus)</span>
+                    <span>
+                      {showWelcomeBonusLabel
+                        ? `Create Account ($${welcomeAmt.toFixed(2)} Welcome Bonus)`
+                        : 'Create Account'}
+                    </span>
                     <Sparkles className="w-4 h-4 text-emerald-200" />
                   </>
                 )}

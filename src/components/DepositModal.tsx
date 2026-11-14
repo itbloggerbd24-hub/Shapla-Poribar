@@ -256,7 +256,15 @@ export const DepositModal: React.FC<DepositModalProps> = ({
                 Instant
               </span>
             </div>
-            <p className="text-xs text-slate-400 mt-1">Min $5.00 USD • $1.00 instant bonus on 1st approved deposit</p>
+            <p className="text-xs text-slate-400 mt-1">
+              Min ${(adminSettings.minDepositUSD || 5).toFixed(2)} USD
+              {adminSettings.bonusConfig?.bonusesEnabled !== false && adminSettings.bonusConfig?.welcomeBonusEnabled !== false && Number(adminSettings.bonusConfig?.welcomeBonusUSD ?? 1) > 0
+                ? ` • $${Number(adminSettings.bonusConfig?.welcomeBonusUSD ?? 1).toFixed(2)} instant bonus on 1st approved deposit`
+                : ''}
+              {adminSettings.bonusConfig?.bonusesEnabled !== false && adminSettings.bonusConfig?.depositBonusEnabled && Number(adminSettings.bonusConfig?.depositBonusPercent || 0) > 0
+                ? ` • +${adminSettings.bonusConfig.depositBonusPercent}% Deposit Promo Active!`
+                : ''}
+            </p>
           </div>
         </div>
 

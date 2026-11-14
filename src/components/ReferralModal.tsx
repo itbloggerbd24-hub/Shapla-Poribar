@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { UserProfile } from '../types/game';
+import { AdminSettings, UserProfile } from '../types/game';
+import { DEFAULT_BONUS_CONFIG } from '../utils/storage';
 import { 
   X, 
   Copy, 
@@ -20,6 +21,7 @@ interface ReferralModalProps {
   isOpen: boolean;
   onClose: () => void;
   user: UserProfile;
+  adminSettings?: AdminSettings;
   onClaimMilestone?: (milestoneLevel: 5 | 10 | 20, rewardAmount: number) => void;
 }
 
@@ -27,6 +29,7 @@ export const ReferralModal: React.FC<ReferralModalProps> = ({
   isOpen,
   onClose,
   user,
+  adminSettings,
   onClaimMilestone,
 }) => {
   const [copiedLink, setCopiedLink] = useState(false);
@@ -34,13 +37,30 @@ export const ReferralModal: React.FC<ReferralModalProps> = ({
 
   if (!isOpen) return null;
 
+  const bonusCfg = {
+    ...DEFAULT_BONUS_CONFIG,
+    ...(adminSettings?.bonusConfig || {}),
+  };
+
+  const refAmt = Number(bonusCfg.referralBonusUSD ?? 0.50);
+  const welcomeAmt = Number(bonusCfg.welcomeBonusUSD ?? 1.00);
+  const minDepAmt = Number(bonusCfg.minDepositForBonusUSD ?? adminSettings?.minDepositUSD ?? 5.00);
+
+  const milestones = [
+    { target: 5, reward: Number(bonusCfg.referralMilestone5USD ?? 0.50), label: 'First 5 Friends Referred' },
+    { target: 10, reward: Number(bonusCfg.referralMilestone10USD ?? 1.00), label: '10 Friends Referred' },
+    { target: 20, reward: Number(bonusCfg.referralMilestone20USD ?? 3.00), label: '20 Friends Referred' },
+    { target: 50, reward: Number(bonusCfg.referralMilestone50USD ?? 5.00), label: '50 Friends Referred' },
+    { target: 100, reward: Number(bonusCfg.referralMilestone100USD ?? 10.00), label: '100 Friends Referred' },
+  ];
+
   const referralCode = user.referralCode || `SP-${user.phone ? user.phone.slice(-4) : '7788'}`;
   const shareUrl = typeof window !== 'undefined' 
     ? `${window.location.origin}/?ref=${referralCode}` 
     : `https://shaplapro.com/?ref=${referralCode}`;
 
   const count = user.referralCount || 0;
-  const bonusEarned = user.referralBonusEarned || (count * 0.50);
+  const bonusEarned = user.referralBonusEarned ?? (count * refAmt);
 
   const handleCopyLink = () => {
     navigator.clipboard.writeText(shareUrl);
@@ -58,7 +78,7 @@ export const ReferralModal: React.FC<ReferralModalProps> = ({
     if (navigator.share) {
       navigator.share({
         title: 'Join Shapla Poribar Prediction',
-        text: `Use my invite code ${referralCode} to get $1.00 welcome bonus on Shapla Poribar!`,
+        text: `Use my invite code ${referralCode} to get $${welcomeAmt.toFixed(2)} welcome bonus on Shapla Poribar!`,
         url: shareUrl,
       }).catch(() => handleCopyLink());
     } else {
@@ -92,10 +112,14 @@ export const ReferralModal: React.FC<ReferralModalProps> = ({
             <div className="flex items-center gap-2">
               <h1 className="text-lg sm:text-2xl font-black text-white">Refer & Earn Program</h1>
               <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-bold border border-emerald-500/30">
-                +$0.50 USD
+                {bonusCfg.bonusesEnabled && bonusCfg.referralBonusEnabled ? `+$${refAmt.toFixed(2)} USD` : 'Paused'}
               </span>
             </div>
-            <p className="text-xs text-slate-400 mt-1">Earn $0.50 for every friend + extra milestone bonuses</p>
+            <p className="text-xs text-slate-400 mt-1">
+              {bonusCfg.bonusesEnabled && bonusCfg.referralBonusEnabled
+                ? `Earn $${refAmt.toFixed(2)} for every friend + extra milestone bonuses`
+                : 'Referral bonus program is currently paused by administration'}
+            </p>
           </div>
         </div>
 
@@ -132,7 +156,7 @@ export const ReferralModal: React.FC<ReferralModalProps> = ({
                 <span>Your Exclusive Referral Link:</span>
               </label>
               <span className="text-[10px] text-emerald-400 font-semibold font-mono">
-                +$0.50 / Friend
+                +${refAmt.toFixed(2)} / Friend
               </span>
             </div>
 
@@ -178,181 +202,56 @@ export const ReferralModal: React.FC<ReferralModalProps> = ({
           </div>
 
           {/* Referral Milestone Rewards */}
-          <div className="space-y-2.5">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
-              <Flame className="w-4 h-4 text-amber-400" />
-              <span>Milestone Cash Bonuses:</span>
-            </h3>
+          {bonusCfg.bonusesEnabled && bonusCfg.referralMilestonesEnabled && (
+            <div className="space-y-2.5">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
+                <Flame className="w-4 h-4 text-amber-400" />
+                <span>Milestone Cash Bonuses:</span>
+              </h3>
 
-            <div className="space-y-2 text-xs">
-              
-              {/* Milestone 1: 5 Referrals -> +$0.50 USD */}
-              <div className={`p-3 rounded-xl border flex items-center justify-between ${
-                count >= 5 
-                  ? 'bg-emerald-950/30 border-emerald-500/40' 
-                  : 'bg-slate-950/60 border-slate-800'
-              }`}>
-                <div className="flex items-center gap-2.5">
-                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs ${
-                    count >= 5 ? 'bg-emerald-500 text-slate-950 font-black' : 'bg-slate-800 text-slate-400'
-                  }`}>
-                    {count >= 5 ? '✓' : '5'}
-                  </div>
-                  <div>
-                    <div className="font-bold text-white flex items-center gap-1.5">
-                      <span>First 5 Friends Referred</span>
-                      <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-500/10 text-amber-300 font-bold">
-                        +$0.50 Extra
+              <div className="space-y-2 text-xs">
+                {milestones.map((ms) => {
+                  const unlocked = count >= ms.target;
+                  return (
+                    <div
+                      key={ms.target}
+                      className={`p-3 rounded-xl border flex items-center justify-between ${
+                        unlocked
+                          ? 'bg-emerald-950/30 border-emerald-500/40'
+                          : 'bg-slate-950/60 border-slate-800'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs ${
+                          unlocked ? 'bg-emerald-500 text-slate-950 font-black' : 'bg-slate-800 text-slate-400'
+                        }`}>
+                          {unlocked ? '✓' : ms.target}
+                        </div>
+                        <div>
+                          <div className="font-bold text-white flex items-center gap-1.5">
+                            <span>{ms.label}</span>
+                            <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-500/10 text-amber-300 font-bold">
+                              +${ms.reward.toFixed(2)} Extra
+                            </span>
+                          </div>
+                          <div className="text-[10px] text-slate-400">
+                            Progress: {Math.min(count, ms.target)} / {ms.target} completed
+                          </div>
+                        </div>
+                      </div>
+                      <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                        unlocked
+                          ? 'bg-emerald-500/20 text-emerald-400'
+                          : 'bg-slate-800 text-slate-500'
+                      }`}>
+                        {unlocked ? `Unlocked (+$${ms.reward.toFixed(2)})` : `${ms.target - Math.min(count, ms.target)} needed`}
                       </span>
                     </div>
-                    <div className="text-[10px] text-slate-400">
-                      Progress: {Math.min(count, 5)} / 5 completed
-                    </div>
-                  </div>
-                </div>
-                <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                  count >= 5 
-                    ? 'bg-emerald-500/20 text-emerald-400' 
-                    : 'bg-slate-800 text-slate-500'
-                }`}>
-                  {count >= 5 ? 'Unlocked (+$0.50)' : `${5 - count} needed`}
-                </span>
+                  );
+                })}
               </div>
-
-              {/* Milestone 2: 10 Referrals -> +$1.00 USD */}
-              <div className={`p-3 rounded-xl border flex items-center justify-between ${
-                count >= 10 
-                  ? 'bg-emerald-950/30 border-emerald-500/40' 
-                  : 'bg-slate-950/60 border-slate-800'
-              }`}>
-                <div className="flex items-center gap-2.5">
-                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs ${
-                    count >= 10 ? 'bg-emerald-500 text-slate-950 font-black' : 'bg-slate-800 text-slate-400'
-                  }`}>
-                    {count >= 10 ? '✓' : '10'}
-                  </div>
-                  <div>
-                    <div className="font-bold text-white flex items-center gap-1.5">
-                      <span>10 Friends Referred</span>
-                      <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-500/10 text-amber-300 font-bold">
-                        +$1.00 Extra
-                      </span>
-                    </div>
-                    <div className="text-[10px] text-slate-400">
-                      Progress: {Math.min(count, 10)} / 10 completed
-                    </div>
-                  </div>
-                </div>
-                <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                  count >= 10 
-                    ? 'bg-emerald-500/20 text-emerald-400' 
-                    : 'bg-slate-800 text-slate-500'
-                }`}>
-                  {count >= 10 ? 'Unlocked (+$1.00)' : `${10 - Math.min(count, 10)} needed`}
-                </span>
-              </div>
-
-              {/* Milestone 3: 20 Referrals -> +$3.00 USD */}
-              <div className={`p-3 rounded-xl border flex items-center justify-between ${
-                count >= 20 
-                  ? 'bg-emerald-950/30 border-emerald-500/40' 
-                  : 'bg-slate-950/60 border-slate-800'
-              }`}>
-                <div className="flex items-center gap-2.5">
-                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs ${
-                    count >= 20 ? 'bg-emerald-500 text-slate-950 font-black' : 'bg-slate-800 text-slate-400'
-                  }`}>
-                    {count >= 20 ? '✓' : '20'}
-                  </div>
-                  <div>
-                    <div className="font-bold text-white flex items-center gap-1.5">
-                      <span>20 Friends Referred</span>
-                      <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-500/10 text-amber-300 font-bold">
-                        +$3.00 Extra
-                      </span>
-                    </div>
-                    <div className="text-[10px] text-slate-400">
-                      Progress: {Math.min(count, 20)} / 20 completed
-                    </div>
-                  </div>
-                </div>
-                <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                  count >= 20 
-                    ? 'bg-emerald-500/20 text-emerald-400' 
-                    : 'bg-slate-800 text-slate-500'
-                }`}>
-                  {count >= 20 ? 'Unlocked (+$3.00)' : `${20 - Math.min(count, 20)} needed`}
-                </span>
-              </div>
-
-              {/* Milestone 4: 50 Referrals -> +$5.00 USD */}
-              <div className={`p-3 rounded-xl border flex items-center justify-between ${
-                count >= 50 
-                  ? 'bg-emerald-950/30 border-emerald-500/40' 
-                  : 'bg-slate-950/60 border-slate-800'
-              }`}>
-                <div className="flex items-center gap-2.5">
-                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs ${
-                    count >= 50 ? 'bg-emerald-500 text-slate-950 font-black' : 'bg-slate-800 text-slate-400'
-                  }`}>
-                    {count >= 50 ? '✓' : '50'}
-                  </div>
-                  <div>
-                    <div className="font-bold text-white flex items-center gap-1.5">
-                      <span>50 Friends Referred</span>
-                      <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-500/10 text-amber-300 font-bold">
-                        +$5.00 Extra
-                      </span>
-                    </div>
-                    <div className="text-[10px] text-slate-400">
-                      Progress: {Math.min(count, 50)} / 50 completed
-                    </div>
-                  </div>
-                </div>
-                <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                  count >= 50 
-                    ? 'bg-emerald-500/20 text-emerald-400' 
-                    : 'bg-slate-800 text-slate-500'
-                }`}>
-                  {count >= 50 ? 'Unlocked (+$5.00)' : `${50 - Math.min(count, 50)} needed`}
-                </span>
-              </div>
-
-              {/* Milestone 5: 100 Referrals -> +$10.00 USD */}
-              <div className={`p-3 rounded-xl border flex items-center justify-between ${
-                count >= 100 
-                  ? 'bg-emerald-950/30 border-emerald-500/40' 
-                  : 'bg-slate-950/60 border-slate-800'
-              }`}>
-                <div className="flex items-center gap-2.5">
-                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs ${
-                    count >= 100 ? 'bg-emerald-500 text-slate-950 font-black' : 'bg-slate-800 text-slate-400'
-                  }`}>
-                    {count >= 100 ? '✓' : '100'}
-                  </div>
-                  <div>
-                    <div className="font-bold text-white flex items-center gap-1.5">
-                      <span>100 Friends Referred</span>
-                      <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-500/10 text-amber-300 font-bold">
-                        +$10.00 Extra
-                      </span>
-                    </div>
-                    <div className="text-[10px] text-slate-400">
-                      Progress: {Math.min(count, 100)} / 100 completed
-                    </div>
-                  </div>
-                </div>
-                <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                  count >= 100 
-                    ? 'bg-emerald-500/20 text-emerald-400' 
-                    : 'bg-slate-800 text-slate-500'
-                }`}>
-                  {count >= 100 ? 'Unlocked (+$10.00)' : `${100 - Math.min(count, 100)} needed`}
-                </span>
-              </div>
-
             </div>
-          </div>
+          )}
 
           {/* Important Rules / Terms Notice */}
           <div className="p-3 rounded-xl bg-amber-500/5 border border-amber-500/20 text-xs text-slate-300 space-y-1.5">
@@ -362,9 +261,9 @@ export const ReferralModal: React.FC<ReferralModalProps> = ({
             </div>
             <ul className="text-[11px] text-slate-400 space-y-1 list-disc pl-4 leading-relaxed">
               <li>All bonuses (Weekly, Monthly, Signup, and Referral rewards) activate after the 1st approved deposit.</li>
-              <li>Referral bonus is credited as <strong>$0.50 USD</strong> upon your friend's 1st deposit.</li>
-              <li>New players receive an instant <strong>$1.00 USD</strong> welcome signup bonus on their 1st deposit.</li>
-              <li>Minimum deposit amount is <strong>$5.00 USD</strong> via Binance Pay or USDT.</li>
+              <li>Referral bonus is credited as <strong>${refAmt.toFixed(2)} USD</strong> upon your friend's 1st deposit.</li>
+              <li>New players receive an instant <strong>${welcomeAmt.toFixed(2)} USD</strong> welcome signup bonus on their 1st deposit.</li>
+              <li>Minimum deposit amount is <strong>${minDepAmt.toFixed(2)} USD</strong> via Binance Pay or USDT.</li>
             </ul>
           </div>
 

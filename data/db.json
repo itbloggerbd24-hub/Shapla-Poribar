@@ -163,6 +163,27 @@
       "message": "আমাদের নতুন সাপোর্ট এজেন্ট ডিপোজিট ও রেফারেল সিস্টেম চালু হয়েছে!",
       "badge": "HOT",
       "updatedAt": 1794048610916
+    },
+    "bonusConfig": {
+      "bonusesEnabled": true,
+      "minDepositForBonusUSD": 5,
+      "welcomeBonusEnabled": true,
+      "welcomeBonusUSD": 1,
+      "depositBonusEnabled": false,
+      "depositBonusPercent": 0,
+      "weeklyBonusEnabled": true,
+      "weeklyBonusUSD": 0.5,
+      "monthlyBonusEnabled": true,
+      "monthlyBonusUSD": 1,
+      "referralBonusEnabled": true,
+      "referralBonusUSD": 0.5,
+      "referralMilestonesEnabled": true,
+      "referralMilestone5USD": 0.5,
+      "referralMilestone10USD": 1,
+      "referralMilestone20USD": 3,
+      "referralMilestone50USD": 5,
+      "referralMilestone100USD": 10,
+      "customPromoText": ""
     }
   },
   "bets": [],
