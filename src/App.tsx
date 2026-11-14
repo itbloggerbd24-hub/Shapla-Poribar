@@ -218,12 +218,17 @@ export default function App() {
     return false;
   };
 
-  const handlePublishNotice = async (title: string, message: string, badge?: string) => {
+  const handlePublishNotice = async (
+    title: string,
+    message: string,
+    badge?: string,
+    type: 'ADMIN_NOTICE' | 'FESTIVAL_BONUS' = 'ADMIN_NOTICE'
+  ) => {
     const res = await authApi.publishNotification({
       title,
       message,
       badge: badge || 'NOTICE',
-      type: 'ADMIN_NOTICE',
+      type,
       userId: 'all',
     });
     if (res.success && res.notification) {
@@ -231,7 +236,9 @@ export default function App() {
       if (res.quickNotice) {
         setAdminSettings((prev) => ({ ...prev, quickNotice: res.quickNotice }));
       }
+      return true;
     }
+    return false;
   };
 
   const handleLoginSuccess = (loggedInUser: UserProfile) => {
@@ -374,6 +381,56 @@ export default function App() {
         walletBalance: Number((u.walletBalance + monthlyAmt).toFixed(2)),
         lockedBonusBalance: Number(((u.lockedBonusBalance || 0) + monthlyAmt).toFixed(2)),
         lastMonthlyClaim: Date.now(),
+      };
+      saveToStorage('active_user_session', next);
+      return next;
+    });
+  };
+
+  // Claim Special Festival / Occasion Bonus (Eid, Puja, Holidays) - 1 claim per festival campaign ID
+  const handleClaimFestival = async () => {
+    if (!userHasApprovedDeposit) {
+      setIsRewardsOpen(false);
+      setIsDepositOpen(true);
+      return;
+    }
+
+    const bonusCfg = { ...DEFAULT_BONUS_CONFIG, ...(adminSettings.bonusConfig || {}) };
+    const festivalAmt = Number(bonusCfg.festivalBonusAmountUSD ?? 0);
+    if (!bonusCfg.bonusesEnabled || !bonusCfg.festivalBonusEnabled || festivalAmt <= 0) {
+      return;
+    }
+
+    const festivalId = bonusCfg.festivalBonusId || 'fest_special_1';
+    const claimedIds = Array.isArray(user.claimedFestivalBonusIds) ? user.claimedFestivalBonusIds : [];
+    if (user.claimedFestivalBonusId === festivalId || claimedIds.includes(festivalId)) {
+      return;
+    }
+
+    if (user?.id) {
+      const res = await authApi.claimBonus(user.id, 'festival');
+      if (res.success && res.user) {
+        setUser(res.user);
+        setCurrentUser(res.user);
+        saveToStorage('active_user_session', res.user);
+        setAllUsers((prev) => prev.map((u) => (u.id === res.user!.id ? res.user! : u)));
+        authApi.fetchNotifications(res.user.id).then((notifs) => {
+          if (notifs) setNotifications(notifs);
+        });
+        return;
+      }
+      if (res.error && !res.error.includes('Network')) {
+        return;
+      }
+    }
+
+    setUser((u) => {
+      const next = {
+        ...u,
+        walletBalance: Number((u.walletBalance + festivalAmt).toFixed(2)),
+        lockedBonusBalance: Number(((u.lockedBonusBalance || 0) + festivalAmt).toFixed(2)),
+        claimedFestivalBonusId: festivalId,
+        claimedFestivalBonusIds: Array.from(new Set([...(u.claimedFestivalBonusIds || []), festivalId])),
       };
       saveToStorage('active_user_session', next);
       return next;
@@ -1288,6 +1345,7 @@ export default function App() {
             onClose={() => setIsNotificationOpen(false)}
             notifications={notifications}
             quickNotice={adminSettings.quickNotice}
+            adminSettings={adminSettings}
             onOpenDeposit={() => {
               setIsNotificationOpen(false);
               setIsDepositOpen(true);
@@ -1295,6 +1353,10 @@ export default function App() {
             onOpenReferral={() => {
               setIsNotificationOpen(false);
               setIsReferralOpen(true);
+            }}
+            onOpenRewards={() => {
+              setIsNotificationOpen(false);
+              setIsRewardsOpen(true);
             }}
           />
         ) : isRulesOpen ? (
@@ -1325,6 +1387,7 @@ export default function App() {
             }}
             onClaimWeekly={handleClaimWeekly}
             onClaimMonthly={handleClaimMonthly}
+            onClaimFestival={handleClaimFestival}
           />
         ) : isProfileOpen ? (
           /* Dedicated Full Page Profile Details View */

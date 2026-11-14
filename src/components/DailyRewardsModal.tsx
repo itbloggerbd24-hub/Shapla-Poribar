@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { AdminSettings, UserProfile } from '../types/game';
 import { DEFAULT_BONUS_CONFIG } from '../utils/storage';
 import { 
-  X, 
   Gift, 
   Sparkles, 
   Clock, 
@@ -10,8 +9,8 @@ import {
   Flame, 
   Lock, 
   ArrowRight, 
-  ShieldAlert,
-  ArrowLeft
+  ArrowLeft,
+  CheckCircle2
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { soundManager } from '../utils/audio';
@@ -23,6 +22,7 @@ interface DailyRewardsModalProps {
   adminSettings?: AdminSettings;
   onClaimWeekly: () => void;
   onClaimMonthly: () => void;
+  onClaimFestival?: () => void;
   onClaimDaily?: () => void;
   hasDeposited?: boolean;
   onOpenDeposit?: () => void;
@@ -38,6 +38,7 @@ export const DailyRewardsModal: React.FC<DailyRewardsModalProps> = ({
   adminSettings,
   onClaimWeekly,
   onClaimMonthly,
+  onClaimFestival,
   hasDeposited,
   onOpenDeposit,
 }) => {
@@ -59,10 +60,18 @@ export const DailyRewardsModal: React.FC<DailyRewardsModalProps> = ({
   const weeklyAmt = Number(bonusCfg.weeklyBonusUSD ?? 0.50);
   const monthlyAmt = Number(bonusCfg.monthlyBonusUSD ?? 1.00);
   const welcomeAmt = Number(bonusCfg.welcomeBonusUSD ?? 1.00);
+  const festivalAmt = Number(bonusCfg.festivalBonusAmountUSD ?? 0);
   const minDepAmt = Number(bonusCfg.minDepositForBonusUSD ?? adminSettings?.minDepositUSD ?? 5.00);
 
   const isWeeklyActive = bonusCfg.bonusesEnabled && bonusCfg.weeklyBonusEnabled && weeklyAmt > 0;
   const isMonthlyActive = bonusCfg.bonusesEnabled && bonusCfg.monthlyBonusEnabled && monthlyAmt > 0;
+  const isFestivalActive = bonusCfg.bonusesEnabled && bonusCfg.festivalBonusEnabled && festivalAmt > 0;
+
+  const festivalId = bonusCfg.festivalBonusId || 'fest_special_1';
+  const isFestivalAlreadyClaimed = Boolean(
+    user.claimedFestivalBonusId === festivalId ||
+    (Array.isArray(user.claimedFestivalBonusIds) && user.claimedFestivalBonusIds.includes(festivalId))
+  );
 
   // All bonuses work only after 1st deposit is approved
   const isDepositUnlocked = Boolean(hasDeposited ?? user.firstDepositDone);
@@ -72,6 +81,7 @@ export const DailyRewardsModal: React.FC<DailyRewardsModalProps> = ({
 
   const weeklyEligible = isWeeklyActive && isDepositUnlocked && (now - lastWeekly) >= ONE_WEEK_MS;
   const monthlyEligible = isMonthlyActive && isDepositUnlocked && (now - lastMonthly) >= ONE_MONTH_MS;
+  const festivalEligible = isFestivalActive && isDepositUnlocked && !isFestivalAlreadyClaimed;
 
   const weeklyRemainingMs = Math.max(0, ONE_WEEK_MS - (now - lastWeekly));
   const monthlyRemainingMs = Math.max(0, ONE_MONTH_MS - (now - lastMonthly));
@@ -120,6 +130,23 @@ export const DailyRewardsModal: React.FC<DailyRewardsModalProps> = ({
     });
     soundManager.playWin();
     onClaimMonthly();
+  };
+
+  const handleClaimFestivalClick = () => {
+    if (!isDepositUnlocked) {
+      onClose();
+      onOpenDeposit?.();
+      return;
+    }
+    if (!festivalEligible) return;
+    confetti({
+      particleCount: 160,
+      spread: 100,
+      origin: { y: 0.55 },
+      colors: ['#d946ef', '#f59e0b', '#10b981', '#fde047'],
+    });
+    soundManager.playWin();
+    onClaimFestival?.();
   };
 
   return (
@@ -194,6 +221,76 @@ export const DailyRewardsModal: React.FC<DailyRewardsModalProps> = ({
 
         <div className="mt-4 space-y-4">
           
+          {/* Special Festival / Occasion Offer Card (Eid, Puja, Holidays) */}
+          {isFestivalActive && (
+            <div className={`p-4 rounded-2xl border transition ${
+              !isDepositUnlocked
+                ? 'bg-gradient-to-br from-fuchsia-950/30 via-slate-950 to-slate-950 border-fuchsia-500/30 opacity-95'
+                : festivalEligible
+                ? 'bg-gradient-to-br from-fuchsia-500/20 via-amber-500/10 to-slate-950 border-fuchsia-400/70 shadow-xl ring-1 ring-fuchsia-400/40'
+                : 'bg-slate-950/70 border-slate-800'
+            }`}>
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-fuchsia-500/20 text-fuchsia-300 flex items-center justify-center shrink-0">
+                    <Sparkles className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <h3 className="text-sm font-black text-white">
+                        {bonusCfg.festivalBonusTitle || 'Special Festival Bonus Offer'}
+                      </h3>
+                      <span className="px-1.5 py-0.5 rounded-md bg-gradient-to-r from-fuchsia-500 to-amber-400 text-slate-950 text-[9px] font-black uppercase">
+                        FESTIVAL OFFER
+                      </span>
+                      {!isDepositUnlocked && (
+                        <span className="px-1.5 py-0.5 rounded-md bg-rose-500/20 text-rose-300 text-[9px] font-bold flex items-center gap-0.5">
+                          <Lock className="w-2.5 h-2.5" /> Locked
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-[10px] text-fuchsia-300">Limited-time special occasion offer (1 claim per event)</span>
+                  </div>
+                </div>
+                <div className="text-base font-black text-fuchsia-300 font-mono shrink-0">
+                  +${festivalAmt.toFixed(2)} USD
+                </div>
+              </div>
+
+              <p className="text-xs text-slate-200 leading-relaxed mb-3 whitespace-pre-line">
+                {bonusCfg.festivalBonusDescription || 'Celebrate this special occasion with an exclusive bonus reward!'}
+              </p>
+
+              {!isDepositUnlocked ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onOpenDeposit?.();
+                  }}
+                  className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-750 border border-fuchsia-500/40 text-fuchsia-300 font-bold text-xs shadow transition cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  <Lock className="w-3.5 h-3.5 text-fuchsia-400" />
+                  <span>Make 1st Deposit to Unlock (${festivalAmt.toFixed(2)})</span>
+                </button>
+              ) : festivalEligible ? (
+                <button
+                  type="button"
+                  onClick={handleClaimFestivalClick}
+                  className="w-full py-2.5 rounded-xl bg-gradient-to-r from-fuchsia-500 via-pink-500 to-amber-400 hover:from-fuchsia-400 hover:to-amber-300 text-slate-950 font-black text-xs shadow-lg transition transform active:scale-98 cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  <Sparkles className="w-4 h-4 text-slate-950" />
+                  <span>Claim ${festivalAmt.toFixed(2)} Special Festival Bonus</span>
+                </button>
+              ) : (
+                <div className="w-full py-2.5 px-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-bold flex items-center justify-center gap-1.5">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                  <span>You have already claimed this Festival Bonus!</span>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Card 1: Weekly Free Bonus */}
           <div className={`p-4 rounded-2xl border transition ${
             !isWeeklyActive || !isDepositUnlocked

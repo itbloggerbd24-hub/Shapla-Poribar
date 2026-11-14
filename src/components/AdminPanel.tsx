@@ -58,7 +58,7 @@ interface AdminPanelProps {
   onAdjustUserBalance: (userId: string, newBalance: number) => void;
   onGrantUserBonus?: (userId: string, amountUSD: number, note?: string) => Promise<boolean | void>;
   onToggleSuspendUser?: (userId: string, isSuspended: boolean, reason?: string) => void;
-  onPublishNotice?: (title: string, message: string, badge?: string) => Promise<boolean | void>;
+  onPublishNotice?: (title: string, message: string, badge?: string, type?: 'ADMIN_NOTICE' | 'FESTIVAL_BONUS') => Promise<boolean | void>;
   onCloseAdmin: () => void;
   allBets?: Bet[];
 }
@@ -85,6 +85,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [editableSettings, setEditableSettings] = useState<AdminSettings>(settings);
   const [settingsSaved, setSettingsSaved] = useState<boolean>(false);
   const [bonusesSaved, setBonusesSaved] = useState<boolean>(false);
+  const [festivalNoticeSent, setFestivalNoticeSent] = useState<boolean>(false);
   const [noticePublished, setNoticePublished] = useState<boolean>(false);
   
   useEffect(() => {
@@ -225,9 +226,27 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   const handleSaveBonusOffers = async (e: React.FormEvent) => {
     e.preventDefault();
+    const wasFestivalOn = Boolean(settings.bonusConfig?.festivalBonusEnabled);
+    const isNowFestivalOn = Boolean(editableSettings.bonusConfig?.festivalBonusEnabled);
     await onUpdateSettings(editableSettings);
+    if (!wasFestivalOn && isNowFestivalOn && onPublishNotice) {
+      const cfg = { ...DEFAULT_BONUS_CONFIG, ...(editableSettings.bonusConfig || {}) };
+      const titleText = cfg.festivalBonusTitle?.trim() || 'Special Festival Bonus Offer';
+      const descText = cfg.festivalBonusDescription?.trim() || 'Celebrate this special occasion with an exclusive bonus reward!';
+      const amtText = Number(cfg.festivalBonusAmountUSD || 0).toFixed(2);
+      await onPublishNotice(
+        `🎉 ${titleText} (+$${amtText} USD)`,
+        `${descText}\n\nOffer Amount: +$${amtText} USD • Open the Reward Center to claim this special occasion bonus!`,
+        'FESTIVAL OFFER',
+        'FESTIVAL_BONUS'
+      );
+      setFestivalNoticeSent(true);
+    }
     setBonusesSaved(true);
-    setTimeout(() => setBonusesSaved(false), 2500);
+    setTimeout(() => {
+      setBonusesSaved(false);
+      setFestivalNoticeSent(false);
+    }, 2500);
   };
 
   const handleResetDefaultBonuses = () => {
@@ -235,6 +254,37 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       ...prev,
       bonusConfig: { ...DEFAULT_BONUS_CONFIG },
     }));
+  };
+
+  const handleSaveAndBroadcastFestival = async () => {
+    const cfg = {
+      ...DEFAULT_BONUS_CONFIG,
+      ...(editableSettings.bonusConfig || {}),
+      festivalBonusEnabled: true,
+    };
+    const nextSettings: AdminSettings = {
+      ...editableSettings,
+      bonusConfig: cfg,
+    };
+    setEditableSettings(nextSettings);
+    await onUpdateSettings(nextSettings);
+    if (onPublishNotice) {
+      const titleText = cfg.festivalBonusTitle?.trim() || 'Special Festival Bonus Offer';
+      const descText = cfg.festivalBonusDescription?.trim() || 'Celebrate this special occasion with an exclusive bonus reward!';
+      const amtText = Number(cfg.festivalBonusAmountUSD || 0).toFixed(2);
+      await onPublishNotice(
+        `🎉 ${titleText} (+$${amtText} USD)`,
+        `${descText}\n\nOffer Amount: +$${amtText} USD • Open the Reward Center to claim this special occasion bonus!`,
+        'FESTIVAL OFFER',
+        'FESTIVAL_BONUS'
+      );
+    }
+    setBonusesSaved(true);
+    setFestivalNoticeSent(true);
+    setTimeout(() => {
+      setBonusesSaved(false);
+      setFestivalNoticeSent(false);
+    }, 3000);
   };
 
   return (
@@ -1202,6 +1252,169 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   onChange={(e) => updateBonusField('referralMilestone100USD', Math.max(0, Number(e.target.value)))}
                   className="w-full bg-slate-900 border border-slate-700 rounded-xl py-2 px-2.5 text-sm text-white font-mono font-bold focus:border-emerald-400 outline-none"
                 />
+              </div>
+            </div>
+          </div>
+
+          {/* Special Festival / Occasion Bonus (Eid, Puja, Holidays) */}
+          <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-fuchsia-950/35 via-amber-950/20 to-slate-950 border border-fuchsia-500/40 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-fuchsia-500/20">
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Sparkles className="w-4 h-4 text-fuchsia-400" />
+                  <h4 className="text-sm font-black text-fuchsia-200">
+                    Special Festival & Occasion Bonus (Eid, Puja & Holidays)
+                  </h4>
+                  <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                    bonusCfg.festivalBonusEnabled
+                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                      : 'bg-slate-800 text-slate-400'
+                  }`}>
+                    {bonusCfg.festivalBonusEnabled ? 'LIVE OFFER' : 'OFFLINE'}
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-300 mt-0.5">
+                  Activate special festival rewards for Eid, Durga Puja, New Year, or national holidays. Players see your occasion notice inside Notifications & can claim once per event.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => updateBonusField('festivalBonusEnabled', !bonusCfg.festivalBonusEnabled)}
+                className={`w-12 h-6 flex items-center rounded-full p-1 cursor-pointer transition shrink-0 ${
+                  bonusCfg.festivalBonusEnabled ? 'bg-fuchsia-500 justify-end' : 'bg-slate-700 justify-start'
+                }`}
+              >
+                <div className="bg-white w-4 h-4 rounded-full shadow" />
+              </button>
+            </div>
+
+            {/* Quick Occasion Preset Chips */}
+            <div>
+              <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
+                Quick Occasion Templates:
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                {[
+                  {
+                    label: 'Eid-ul-Fitr',
+                    title: 'Eid-ul-Fitr Special Bonus Offer',
+                    desc: 'Eid Mubarak! Celebrating Eid-ul-Fitr with a special festive cash gift from Shapla Poribar. Claim your Eid Salami bonus now!',
+                  },
+                  {
+                    label: 'Eid-ul-Adha',
+                    title: 'Eid-ul-Adha Special Bonus Offer',
+                    desc: 'Eid-ul-Adha Mubarak! Enjoy this special occasion bonus reward from Shapla Poribar in celebration of Eid.',
+                  },
+                  {
+                    label: 'Durga Puja',
+                    title: 'Durga Puja Festive Bonus Offer',
+                    desc: 'Sharadiya Shubhechha! Celebrating Durga Puja with a special festive bonus gift for all Shapla Poribar members.',
+                  },
+                  {
+                    label: 'Pohela Boishakh',
+                    title: 'Pohela Boishakh New Year Offer',
+                    desc: 'Shubho Noboborsho! Welcome the Bengali New Year with a special celebration bonus from Shapla Poribar.',
+                  },
+                  {
+                    label: 'Holiday Special',
+                    title: 'Special Celebration Bonus Offer',
+                    desc: 'Celebrating a special occasion today! Claim this limited-time festival bonus offer credited straight to your wallet.',
+                  },
+                ].map((preset) => (
+                  <button
+                    key={preset.label}
+                    type="button"
+                    onClick={() => {
+                      setEditableSettings((prev) => ({
+                        ...prev,
+                        bonusConfig: {
+                          ...DEFAULT_BONUS_CONFIG,
+                          ...(prev.bonusConfig || {}),
+                          festivalBonusTitle: preset.title,
+                          festivalBonusDescription: preset.desc,
+                        },
+                      }));
+                    }}
+                    className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-fuchsia-500/20 border border-slate-700 hover:border-fuchsia-400/50 text-[11px] font-bold text-slate-300 hover:text-fuchsia-200 transition cursor-pointer"
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="md:col-span-2">
+                <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                  Festival / Occasion Offer Title:
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Eid-ul-Fitr Special Bonus or Durga Puja Offer"
+                  value={bonusCfg.festivalBonusTitle || ''}
+                  onChange={(e) => updateBonusField('festivalBonusTitle', e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl py-2 px-3 text-xs text-white focus:border-fuchsia-400 outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                  Special Bonus Amount ($ USD):
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.25"
+                  value={bonusCfg.festivalBonusAmountUSD}
+                  onChange={(e) => updateBonusField('festivalBonusAmountUSD', Math.max(0, Number(e.target.value)))}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl py-2 px-3 text-sm text-fuchsia-300 font-mono font-bold focus:border-fuchsia-400 outline-none"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                Occasion Notice / Description (Shown in Player Notifications & Reward Center):
+              </label>
+              <textarea
+                rows={3}
+                placeholder="Write why this special offer is being given (e.g. Celebrating Eid-ul-Fitr / Durga Puja with an exclusive bonus for all players!)"
+                value={bonusCfg.festivalBonusDescription || ''}
+                onChange={(e) => updateBonusField('festivalBonusDescription', e.target.value)}
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white focus:border-fuchsia-400 outline-none leading-relaxed"
+              />
+            </div>
+
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => updateBonusField('festivalBonusId', `fest_${Date.now()}`)}
+                  className="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 hover:text-white font-bold text-[11px] flex items-center gap-1.5 transition cursor-pointer"
+                  title="Generate a new campaign ID so players who claimed a previous festival offer can claim this new festival offer"
+                >
+                  <RotateCcw className="w-3 h-3 text-fuchsia-400" />
+                  <span>Start New Festival Round (Allow Re-claim)</span>
+                </button>
+                <span className="text-[10px] font-mono text-slate-500">
+                  ID: {bonusCfg.festivalBonusId || 'fest_special_1'}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {festivalNoticeSent && (
+                  <span className="text-[11px] text-emerald-400 font-bold">
+                    ✓ Notice pushed to Notifications!
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={handleSaveAndBroadcastFestival}
+                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-fuchsia-600 to-amber-500 hover:from-fuchsia-500 hover:to-amber-400 text-white font-black text-xs shadow flex items-center gap-1.5 transition cursor-pointer"
+                >
+                  <Bell className="w-3.5 h-3.5" />
+                  <span>Activate & Push Festival Notification</span>
+                </button>
               </div>
             </div>
           </div>

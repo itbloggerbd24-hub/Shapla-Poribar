@@ -455,8 +455,8 @@ export const authApi = {
     return getLocalUsers();
   },
 
-  // Claim Weekly or Monthly Bonus (Server persistent)
-  async claimBonus(userId: string, type: 'weekly' | 'monthly' | 'daily'): Promise<{ success: boolean; user?: UserProfile; error?: string }> {
+  // Claim Weekly, Monthly, or Festival Special Bonus (Server persistent)
+  async claimBonus(userId: string, type: 'weekly' | 'monthly' | 'daily' | 'festival'): Promise<{ success: boolean; user?: UserProfile; error?: string }> {
     try {
       const res = await fetch(`${API_BASE}/users/${userId}/claim-bonus`, {
         method: 'POST',

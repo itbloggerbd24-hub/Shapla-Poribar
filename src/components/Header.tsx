@@ -78,6 +78,8 @@ export const Header: React.FC<HeaderProps> = ({
   const refBonus = Number(bonusCfg.referralBonusUSD ?? 0.50);
   const weeklyBonus = Number(bonusCfg.weeklyBonusUSD ?? 0.50);
   const monthlyBonus = Number(bonusCfg.monthlyBonusUSD ?? 1.00);
+  const festivalBonus = Number(bonusCfg.festivalBonusAmountUSD ?? 0);
+  const isFestivalActive = Boolean(bonusCfg.bonusesEnabled && bonusCfg.festivalBonusEnabled && festivalBonus > 0);
 
   return (
     <>
@@ -239,11 +241,15 @@ export const Header: React.FC<HeaderProps> = ({
             {onOpenRewards && (
               <button
                 onClick={onOpenRewards}
-                className="hidden lg:flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gradient-to-r from-emerald-500/10 to-teal-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 font-bold text-xs transition cursor-pointer"
-                title={`Claim Free Weekly ($${weeklyBonus.toFixed(2)}) & Monthly ($${monthlyBonus.toFixed(2)}) Bonus`}
+                className={`hidden lg:flex items-center gap-1.5 px-3 py-2 rounded-xl border font-bold text-xs transition cursor-pointer ${
+                  isFestivalActive
+                    ? 'bg-gradient-to-r from-fuchsia-500/20 to-amber-500/20 hover:bg-fuchsia-500/30 border-fuchsia-400/50 text-fuchsia-200'
+                    : 'bg-gradient-to-r from-emerald-500/10 to-teal-500/10 hover:bg-emerald-500/20 border-emerald-500/30 text-emerald-300'
+                }`}
+                title={`Claim Free Weekly ($${weeklyBonus.toFixed(2)}), Monthly ($${monthlyBonus.toFixed(2)})${isFestivalActive ? `, & Special Festival ($${festivalBonus.toFixed(2)})` : ''} Bonus`}
               >
-                <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Weekly/Monthly Bonus</span>
+                <Sparkles className={`w-3.5 h-3.5 ${isFestivalActive ? 'text-fuchsia-300 animate-pulse' : 'text-emerald-400'}`} />
+                <span>{isFestivalActive ? 'Rewards & Festival Offer' : 'Weekly/Monthly Bonus'}</span>
               </button>
             )}
 
@@ -541,14 +547,24 @@ export const Header: React.FC<HeaderProps> = ({
                       setIsMobileMenuOpen(false);
                       onOpenRewards();
                     }}
-                    className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl bg-slate-800/60 hover:bg-slate-800 text-emerald-300 border border-emerald-500/20 transition cursor-pointer"
+                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl border transition cursor-pointer ${
+                      isFestivalActive
+                        ? 'bg-fuchsia-500/15 hover:bg-fuchsia-500/25 text-fuchsia-200 border-fuchsia-500/40'
+                        : 'bg-slate-800/60 hover:bg-slate-800 text-emerald-300 border-emerald-500/20'
+                    }`}
                   >
                     <div className="flex items-center gap-3">
-                      <Sparkles className="w-4 h-4 text-emerald-400" />
-                      <span className="font-bold">Weekly & Monthly Rewards</span>
+                      <Sparkles className={`w-4 h-4 ${isFestivalActive ? 'text-fuchsia-300' : 'text-emerald-400'}`} />
+                      <span className="font-bold">
+                        {isFestivalActive ? 'Rewards & Festival Bonus' : 'Weekly & Monthly Rewards'}
+                      </span>
                     </div>
-                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-300 font-bold">
-                      Claim
+                    <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded font-bold ${
+                      isFestivalActive
+                        ? 'bg-fuchsia-500/25 text-fuchsia-200'
+                        : 'bg-emerald-500/10 text-emerald-300'
+                    }`}>
+                      {isFestivalActive ? `+$${festivalBonus.toFixed(2)}` : 'Claim'}
                     </span>
                   </button>
                 )}

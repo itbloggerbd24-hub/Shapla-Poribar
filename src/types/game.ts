@@ -52,6 +52,8 @@ export interface UserProfile {
   lastDailyClaim?: number;
   lastWeeklyClaim?: number;
   lastMonthlyClaim?: number;
+  claimedFestivalBonusId?: string;
+  claimedFestivalBonusIds?: string[];
   firstDepositDone?: boolean;
   pendingReferralBonus?: number;
   nid?: string;
@@ -65,7 +67,7 @@ export interface AppNotification {
   userId?: string; // empty string or 'all' means global broadcast
   title: string;
   message: string;
-  type: 'ADMIN_NOTICE' | 'REFERRAL_BONUS' | 'SIGNUP_BONUS' | 'DEPOSIT_APPROVED' | 'WITHDRAWAL_STATUS' | 'SYSTEM';
+  type: 'ADMIN_NOTICE' | 'REFERRAL_BONUS' | 'SIGNUP_BONUS' | 'DEPOSIT_APPROVED' | 'WITHDRAWAL_STATUS' | 'FESTIVAL_BONUS' | 'SYSTEM';
   badge?: string;
   isRead?: boolean;
   createdAt: number;
@@ -141,6 +143,11 @@ export interface BonusConfig {
   referralMilestone20USD: number;
   referralMilestone50USD: number;
   referralMilestone100USD: number;
+  festivalBonusEnabled: boolean;
+  festivalBonusId: string;
+  festivalBonusTitle: string;
+  festivalBonusDescription: string;
+  festivalBonusAmountUSD: number;
   customPromoText?: string;
 }
 

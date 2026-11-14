@@ -151,6 +151,11 @@ async function startServer() {
     referralMilestone20USD: 3.00,
     referralMilestone50USD: 5.00,
     referralMilestone100USD: 10.00,
+    festivalBonusEnabled: false,
+    festivalBonusId: 'fest_special_1',
+    festivalBonusTitle: 'Eid / Puja Special Festival Offer',
+    festivalBonusDescription: 'Celebrating the festive season with Shapla Poribar! Claim this special occasion bonus credit and enjoy your predictions.',
+    festivalBonusAmountUSD: 2.00,
     customPromoText: '',
   };
 
@@ -859,8 +864,32 @@ async function startServer() {
         }
         bonusAmount = Number(Number(bonusCfg.monthlyBonusUSD).toFixed(2));
         db.users[userIndex].lastMonthlyClaim = now;
+      } else if (type === 'festival') {
+        if (!bonusCfg.festivalBonusEnabled || Number(bonusCfg.festivalBonusAmountUSD) <= 0) {
+          return res.status(400).json({ error: 'Special festival bonus offer is currently not active.' });
+        }
+        const festivalId = bonusCfg.festivalBonusId || 'fest_special_1';
+        const claimedIds = Array.isArray(user.claimedFestivalBonusIds) ? user.claimedFestivalBonusIds : [];
+        if (user.claimedFestivalBonusId === festivalId || claimedIds.includes(festivalId)) {
+          return res.status(400).json({ error: 'You have already claimed this special festival offer.' });
+        }
+        bonusAmount = Number(Number(bonusCfg.festivalBonusAmountUSD).toFixed(2));
+        db.users[userIndex].claimedFestivalBonusId = festivalId;
+        db.users[userIndex].claimedFestivalBonusIds = Array.from(new Set([...claimedIds, festivalId]));
+
+        if (!db.notifications) db.notifications = [];
+        db.notifications.unshift({
+          id: `notif_${Date.now()}_fest_claim_${user.id}`,
+          userId: user.id,
+          title: `🎉 ${bonusCfg.festivalBonusTitle || 'Special Festival Bonus'} Claimed (+$${bonusAmount.toFixed(2)})!`,
+          message: `${bonusCfg.festivalBonusDescription || 'Special festive offer reward'} — $${bonusAmount.toFixed(2)} USD added to your playable bonus balance.`,
+          type: 'FESTIVAL_BONUS',
+          badge: 'FESTIVAL OFFER',
+          isRead: false,
+          createdAt: now,
+        });
       } else {
-        return res.status(400).json({ error: 'Invalid bonus type. Use weekly or monthly.' });
+        return res.status(400).json({ error: 'Invalid bonus type. Use weekly, monthly, or festival.' });
       }
 
       db.users[userIndex].walletBalance = Number(((user.walletBalance || 0) + bonusAmount).toFixed(2));
@@ -1326,8 +1355,8 @@ async function startServer() {
 
       db.notifications.unshift(newNotif);
 
-      // If global notice, update db.settings.quickNotice too
-      if (!userId || userId === 'all') {
+      // If global regular admin notice, update db.settings.quickNotice too (preserve quickNotice for festival offers)
+      if ((!userId || userId === 'all') && (!type || type === 'ADMIN_NOTICE')) {
         if (!db.settings) db.settings = {};
         db.settings.quickNotice = {
           enabled: true,
