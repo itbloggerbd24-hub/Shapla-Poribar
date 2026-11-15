@@ -40,8 +40,10 @@ import {
   Activity,
   Gift,
   Flame,
-  RotateCcw
+  RotateCcw,
+  Cloud
 } from 'lucide-react';
+import { authApi } from '../utils/authApi';
 
 interface AdminPanelProps {
   settings: AdminSettings;
@@ -101,6 +103,44 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [grantBonusNote, setGrantBonusNote] = useState<string>('');
   const [bonusGrantedBanner, setBonusGrantedBanner] = useState<string | null>(null);
   const [viewingDepositSlip, setViewingDepositSlip] = useState<DepositRequest | null>(null);
+  const [cloudActionMsg, setCloudActionMsg] = useState<string | null>(null);
+  const [cloudSyncing, setCloudSyncing] = useState(false);
+
+  const handleAdminCloudPush = async () => {
+    setCloudSyncing(true);
+    setCloudActionMsg(null);
+    const conn = await authApi.signInWithGoogleCloud();
+    if (!conn.success) {
+      setCloudSyncing(false);
+      setCloudActionMsg(conn.error || 'Google Cloud sign-in failed.');
+      return;
+    }
+    const pushRes = await authApi.pushAdminCloudSnapshot();
+    setCloudSyncing(false);
+    if (pushRes.success) {
+      setCloudActionMsg(`Saved ${pushRes.userCount || 0} accounts to Cloud Firestore.`);
+    } else {
+      setCloudActionMsg(pushRes.error || 'Cloud backup requires admin Google account.');
+    }
+    setTimeout(() => setCloudActionMsg(null), 4000);
+  };
+
+  const handleAdminCloudPull = async () => {
+    setCloudSyncing(true);
+    setCloudActionMsg(null);
+    const conn = await authApi.signInWithGoogleCloud();
+    setCloudSyncing(false);
+    if (!conn.success) {
+      setCloudActionMsg(conn.error || 'Google Cloud restore failed.');
+      return;
+    }
+    setCloudActionMsg(
+      conn.restoredUsers
+        ? `Restored ${conn.restoredUsers} account(s) from Cloud Firestore. Reloading list...`
+        : 'All Cloud Firestore accounts are already synced.'
+    );
+    setTimeout(() => setCloudActionMsg(null), 4000);
+  };
 
   const bonusCfg: BonusConfig = {
     ...DEFAULT_BONUS_CONFIG,
@@ -312,13 +352,39 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           </div>
         </div>
 
-        <button
-          onClick={onCloseAdmin}
-          className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white font-bold text-xs transition cursor-pointer"
-        >
-          Close Admin Console
-        </button>
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+          <button
+            type="button"
+            disabled={cloudSyncing}
+            onClick={handleAdminCloudPush}
+            className="px-3.5 py-2 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 font-bold text-xs transition cursor-pointer inline-flex items-center justify-center gap-1.5"
+          >
+            <Cloud className="w-3.5 h-3.5" />
+            <span>{cloudSyncing ? 'Syncing...' : 'Cloud Backup'}</span>
+          </button>
+          <button
+            type="button"
+            disabled={cloudSyncing}
+            onClick={handleAdminCloudPull}
+            className="px-3.5 py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-300 font-bold text-xs transition cursor-pointer inline-flex items-center justify-center gap-1.5"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            <span>Cloud Restore</span>
+          </button>
+          <button
+            onClick={onCloseAdmin}
+            className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white font-bold text-xs transition cursor-pointer"
+          >
+            Close Admin Console
+          </button>
+        </div>
       </div>
+
+      {cloudActionMsg && (
+        <div className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-bold text-center">
+          {cloudActionMsg}
+        </div>
+      )}
 
       {/* SECTION 1: SUPER ADMIN DEPOSIT ANALYTICS */}
       <div className="space-y-2.5">

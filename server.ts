@@ -3,9 +3,18 @@ import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import { initializeApp as initAdminApp, getApps as getAdminApps } from 'firebase-admin/app';
+import { getAuth as getAdminAuth } from 'firebase-admin/auth';
+import firebaseConfig from './firebase-applet-config.json' with { type: 'json' };
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+if (!getAdminApps().length) {
+  initAdminApp({ projectId: firebaseConfig.projectId });
+}
+const adminAuth = getAdminAuth();
+const ADMIN_CLOUD_EMAIL = 'itbloggerbd24@gmail.com';
 
 async function startServer() {
   const app = express();
@@ -621,6 +630,111 @@ async function startServer() {
       return res.json({ success: true, restoredCount });
     } catch (e) {
       return res.status(500).json({ error: 'Batch sync failed' });
+    }
+  });
+
+  // Helper: verify Admin Firebase Bearer ID Token
+  const verifyAdminCloudToken = async (req: express.Request): Promise<boolean> => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader || !authHeader.startsWith('Bearer ')) return false;
+      const token = authHeader.split('Bearer ')[1];
+      const decoded = await adminAuth.verifyIdToken(token);
+      return Boolean(
+        decoded &&
+          decoded.email?.toLowerCase() === ADMIN_CLOUD_EMAIL &&
+          decoded.email_verified === true
+      );
+    } catch {
+      return false;
+    }
+  };
+
+  // 5c. ADMIN CLOUD SNAPSHOT EXPORT (Protected by Verified Admin Firebase Token)
+  app.get('/api/admin/export-snapshot', async (req, res) => {
+    try {
+      const isAuthorized = await verifyAdminCloudToken(req);
+      if (!isAuthorized) {
+        return res.status(401).json({ error: 'Unauthorized: Valid admin Google token required.' });
+      }
+      const db = readDb();
+      return res.json({
+        success: true,
+        snapshot: {
+          users: db.users || [],
+          settings: db.settings || null,
+          deposits: db.deposits || [],
+          withdrawals: db.withdrawals || [],
+          savedAt: Date.now(),
+        },
+      });
+    } catch (e) {
+      return res.status(500).json({ error: 'Export failed' });
+    }
+  });
+
+  // 5d. ADMIN CLOUD SNAPSHOT RESTORE (Protected by Verified Admin Firebase Token)
+  app.post('/api/auth/sync-full-snapshot', async (req, res) => {
+    try {
+      const isAuthorized = await verifyAdminCloudToken(req);
+      if (!isAuthorized) {
+        return res.status(401).json({ error: 'Unauthorized: Valid admin Google token required.' });
+      }
+      const snapshot = req.body?.snapshot;
+      if (!snapshot || !Array.isArray(snapshot.users)) {
+        return res.status(400).json({ error: 'Invalid cloud snapshot payload.' });
+      }
+
+      const db = readDb();
+      let restoredUsers = 0;
+      for (const u of snapshot.users) {
+        if (u && u.phone) {
+          if (upsertLocalUserInDb(db, u)) {
+            restoredUsers++;
+          }
+        }
+      }
+
+      // Restore missing deposits
+      if (Array.isArray(snapshot.deposits)) {
+        if (!db.deposits) db.deposits = [];
+        const existingDepIds = new Set(db.deposits.map((d: any) => d.id));
+        for (const d of snapshot.deposits) {
+          if (d && d.id && !existingDepIds.has(d.id)) {
+            db.deposits.push(d);
+            existingDepIds.add(d.id);
+          }
+        }
+      }
+
+      // Restore missing withdrawals
+      if (Array.isArray(snapshot.withdrawals)) {
+        if (!db.withdrawals) db.withdrawals = [];
+        const existingWthIds = new Set(db.withdrawals.map((w: any) => w.id));
+        for (const w of snapshot.withdrawals) {
+          if (w && w.id && !existingWthIds.has(w.id)) {
+            db.withdrawals.push(w);
+            existingWthIds.add(w.id);
+          }
+        }
+      }
+
+      // Merge settings cleanly if provided
+      if (snapshot.settings && typeof snapshot.settings === 'object') {
+        db.settings = {
+          ...(db.settings || {}),
+          ...snapshot.settings,
+          bonusConfig: {
+            ...getBonusConfig(db),
+            ...(snapshot.settings.bonusConfig || {}),
+          },
+        };
+      }
+
+      writeDb(db);
+      return res.json({ success: true, restoredUsers, totalUsers: db.users.length });
+    } catch (e) {
+      return res.status(500).json({ error: 'Snapshot restore failed' });
     }
   });
 
@@ -1527,6 +1641,84 @@ async function startServer() {
       return res.json({ success: true, settings: db.settings });
     } catch (err: any) {
       return res.status(500).json({ error: 'Failed to update settings.' });
+    }
+  });
+
+  // 20. APP LAUNCHER DOWNLOAD (Universal offline HTML launcher for Mobile, Tablet & Desktop)
+  app.get('/api/app-download/launcher', (req, res) => {
+    try {
+      const requestedOrigin = typeof req.query.origin === 'string' ? req.query.origin.trim() : '';
+      const hostHeader = req.get('host') || 'localhost:3000';
+      const proto = req.headers['x-forwarded-proto'] === 'https' || hostHeader.includes('.run.app') ? 'https' : req.protocol || 'http';
+      const fallbackUrl = `${proto}://${hostHeader}/`;
+
+      let safeAppUrl = fallbackUrl;
+      if (requestedOrigin) {
+        try {
+          const parsed = new URL(requestedOrigin);
+          if (parsed.protocol === 'https:' || parsed.protocol === 'http:') {
+            safeAppUrl = `${parsed.origin}/`;
+          }
+        } catch {
+          safeAppUrl = fallbackUrl;
+        }
+      }
+
+      const escapedUrl = safeAppUrl
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+
+      const launcherHtml = `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Shapla Poribar App Launcher</title>
+  <meta http-equiv="refresh" content="1;url=${escapedUrl}" />
+  <style>
+    * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body {
+      margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      background: radial-gradient(circle at top, #0f172a, #020617); color: #f8fafc; padding: 20px;
+    }
+    .card {
+      width: 100%; max-width: 420px; background: #0f172a; border: 1px solid #1e293b;
+      border-radius: 24px; padding: 28px 24px; text-align: center;
+      box-shadow: 0 24px 60px rgba(0,0,0,0.6);
+    }
+    .badge {
+      display: inline-block; padding: 4px 12px; border-radius: 999px; font-size: 11px; font-weight: 800;
+      background: rgba(16,185,129,0.15); color: #34d399; border: 1px solid rgba(16,185,129,0.35);
+      margin-bottom: 14px; text-transform: uppercase; letter-spacing: 0.06em;
+    }
+    h1 { margin: 0 0 8px; font-size: 22px; font-weight: 900; color: #fde68a; }
+    p { margin: 0 0 20px; font-size: 13px; color: #94a3b8; line-height: 1.5; }
+    .btn {
+      display: block; width: 100%; padding: 14px 18px; border-radius: 14px; text-decoration: none;
+      background: linear-gradient(90deg, #10b981, #14b8a6); color: #020617; font-weight: 900; font-size: 14px;
+    }
+    .hint { margin-top: 14px; font-size: 11px; color: #64748b; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="badge">Mobile • Tablet • Desktop</div>
+    <h1>Shapla Poribar App</h1>
+    <p>Opening your Shapla Poribar app directly in your browser so you can install it onto your Home Screen, Tablet, or Desktop.</p>
+    <a class="btn" href="${escapedUrl}">Launch Shapla Poribar App</a>
+    <div class="hint">Once opened, tap your browser's Install / Add to Home Screen option for full-screen standalone mode.</div>
+  </div>
+  <script>setTimeout(function(){ window.location.replace(${JSON.stringify(safeAppUrl)}); }, 800);</script>
+</body>
+</html>`;
+
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.setHeader('Content-Disposition', 'attachment; filename="Shapla-Poribar-App.html"');
+      return res.send(launcherHtml);
+    } catch {
+      return res.status(500).json({ error: 'Failed to generate app launcher.' });
     }
   });
 

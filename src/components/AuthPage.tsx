@@ -22,11 +22,15 @@ import {
   Check,
   Download,
   Smartphone,
+  Tablet,
+  Monitor,
+  ExternalLink,
   Share,
   MoreVertical,
-  X
+  X,
+  Cloud
 } from 'lucide-react';
-import { usePWAInstall } from '../hooks/usePWAInstall';
+import { DeviceCategory, usePWAInstall } from '../hooks/usePWAInstall';
 
 interface AuthPageProps {
   onLoginSuccess: (user: UserProfile) => void;
@@ -112,21 +116,33 @@ export const AuthPage: React.FC<AuthPageProps> = ({
   const [isLoading, setIsLoading] = useState(false);
 
   // Login-Page-Only App Download / PWA Install state
-  const { isInstallable, isInstalled, isIOS, install } = usePWAInstall();
+  const { isInstallable, isInstalled, isIOS, deviceType, isInIframe, install } = usePWAInstall();
   const [showInstallGuide, setShowInstallGuide] = useState(false);
+  const [installTab, setInstallTab] = useState<DeviceCategory>('mobile');
   const [copiedAppLink, setCopiedAppLink] = useState(false);
+
+  useEffect(() => {
+    setInstallTab(deviceType);
+  }, [deviceType]);
+
+  const appOriginUrl = typeof window !== 'undefined' ? window.location.origin : '';
+  const launcherDownloadUrl =
+    typeof window !== 'undefined'
+      ? `/api/app-download/launcher?origin=${encodeURIComponent(window.location.origin)}`
+      : '/api/app-download/launcher';
 
   const handleAppDownloadClick = async () => {
     if (isInstallable) {
       const outcome = await install();
       if (outcome === 'accepted') {
-        setSuccessMsg('App installation started! Check your home screen or app drawer.');
+        setSuccessMsg('App installation started! Check your Home Screen, Tablet, or Desktop Apps.');
         return;
       }
       if (outcome === 'dismissed') {
         return;
       }
     }
+    setInstallTab(deviceType);
     setShowInstallGuide(true);
   };
 
@@ -137,6 +153,28 @@ export const AuthPage: React.FC<AuthPageProps> = ({
         setTimeout(() => setCopiedAppLink(false), 2500);
       });
     }
+  };
+
+  const handleGoogleCloudRestore = async () => {
+    setIsLoading(true);
+    setError(null);
+    setSuccessMsg(null);
+    const res = await authApi.signInWithGoogleCloud();
+    setIsLoading(false);
+
+    if (!res.success) {
+      setError(res.error || 'Could not connect Google Cloud Backup.');
+      return;
+    }
+
+    if (res.user) {
+      onLoginSuccess(res.user);
+      return;
+    }
+
+    setSuccessMsg(
+      `Google Cloud connected (${res.email || 'verified'}). Sign in or register your Phone + NID account now to save it permanently across updates.`
+    );
   };
 
   // Timer for resend code
@@ -534,7 +572,34 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                 )}
               </button>
 
-              {/* Login-Page-Only App Download Section */}
+              {/* Google Cloud Account Backup & Restore (Sign In tab) */}
+              <div className="pt-2">
+                <button
+                  type="button"
+                  disabled={isLoading}
+                  onClick={handleGoogleCloudRestore}
+                  className="w-full py-2.5 px-4 rounded-xl bg-slate-950 hover:bg-slate-800/90 border border-amber-500/35 hover:border-amber-400 text-slate-100 flex items-center justify-between gap-3 transition cursor-pointer group"
+                >
+                  <div className="flex items-center gap-2.5 text-left">
+                    <div className="w-8 h-8 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-400 flex items-center justify-center shrink-0">
+                      <Cloud className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="text-xs font-black text-amber-300 leading-tight">
+                        Restore / Link Google Cloud
+                      </div>
+                      <div className="text-[10px] text-slate-400 leading-tight">
+                        Keep your account synced permanently across updates
+                      </div>
+                    </div>
+                  </div>
+                  <span className="px-2.5 py-1 rounded-lg bg-amber-500/15 border border-amber-500/40 text-amber-300 text-[10px] font-black uppercase tracking-wide shrink-0">
+                    Sync
+                  </span>
+                </button>
+              </div>
+
+              {/* Login-Page-Only App Download Section (Mobile, Tablet & Desktop) */}
               <div className="pt-3 mt-1 border-t border-slate-800/80">
                 {isInstalled ? (
                   <div className="w-full py-2.5 px-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-bold flex items-center justify-center gap-2">
@@ -553,15 +618,15 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                       </div>
                       <div>
                         <div className="text-xs font-black text-emerald-300 leading-tight">
-                          Download Mobile App
+                          Download Official App
                         </div>
                         <div className="text-[10px] text-slate-400 leading-tight">
-                          Install Shapla Poribar on Android, iOS & Desktop
+                          Install on Mobile, Tablet & Desktop
                         </div>
                       </div>
                     </div>
                     <span className="px-2.5 py-1 rounded-lg bg-emerald-500 text-slate-950 text-[10px] font-black uppercase tracking-wide shrink-0">
-                      Install
+                      {isInstallable ? 'Install' : 'Download'}
                     </span>
                   </button>
                 )}
@@ -1027,18 +1092,24 @@ export const AuthPage: React.FC<AuthPageProps> = ({
         <p>© 2026 Shapla Poribar Official Platform</p>
       </footer>
 
-      {/* Login-Page-Only App Install Guide Modal */}
+      {/* Login-Page-Only App Download & Multi-Device Install Modal */}
       {tab === 'LOGIN' && showInstallGuide && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-md bg-slate-900 border border-slate-700 rounded-3xl p-5 shadow-2xl space-y-4">
+        <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="w-full max-w-md bg-slate-900 border border-slate-700 rounded-3xl p-5 shadow-2xl space-y-4 my-auto">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div className="flex items-center gap-2.5">
                 <div className="w-9 h-9 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 flex items-center justify-center">
-                  <Smartphone className="w-5 h-5" />
+                  {installTab === 'desktop' ? (
+                    <Monitor className="w-5 h-5" />
+                  ) : installTab === 'tablet' ? (
+                    <Tablet className="w-5 h-5" />
+                  ) : (
+                    <Smartphone className="w-5 h-5" />
+                  )}
                 </div>
                 <div>
-                  <h2 className="text-sm font-black text-white">Install Shapla Poribar App</h2>
-                  <p className="text-[11px] text-slate-400">Add to your phone home screen</p>
+                  <h2 className="text-sm font-black text-white">Download Shapla Poribar App</h2>
+                  <p className="text-[11px] text-slate-400">Install on Mobile, Tablet & Desktop</p>
                 </div>
               </div>
               <button
@@ -1050,52 +1121,175 @@ export const AuthPage: React.FC<AuthPageProps> = ({
               </button>
             </div>
 
-            {isIOS ? (
+            {/* Direct Download & Standalone Install Actions */}
+            <div className="space-y-2">
+              {isInstallable && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const outcome = await install();
+                    if (outcome === 'accepted') {
+                      setShowInstallGuide(false);
+                      setSuccessMsg('App installation started! Check your Home Screen, Tablet, or Desktop Apps.');
+                    }
+                  }}
+                  className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs flex items-center justify-center gap-2 shadow-lg cursor-pointer"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>Install Directly Now (1-Click)</span>
+                </button>
+              )}
+
+              {isInIframe && appOriginUrl && (
+                <a
+                  href={appOriginUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-400 hover:from-amber-400 hover:to-yellow-300 text-slate-950 font-black text-xs flex items-center justify-center gap-2 shadow-lg transition"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  <span>Open App Window to Install on This Device</span>
+                </a>
+              )}
+
+              <a
+                href={launcherDownloadUrl}
+                download="Shapla-Poribar-App.html"
+                className="w-full py-2.5 px-4 rounded-xl bg-slate-950 hover:bg-slate-800 border border-emerald-500/45 text-emerald-300 font-bold text-xs flex items-center justify-between gap-2 transition"
+              >
+                <span className="flex items-center gap-2">
+                  <Download className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>Download App Package (Shapla-Poribar-App.html)</span>
+                </span>
+                <span className="px-2 py-0.5 rounded bg-emerald-500/15 text-[10px] font-black uppercase text-emerald-300 shrink-0">
+                  Save File
+                </span>
+              </a>
+            </div>
+
+            {/* Device Selector Tabs: Mobile | Tablet | Desktop */}
+            <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-950 rounded-xl border border-slate-800">
+              <button
+                type="button"
+                onClick={() => setInstallTab('mobile')}
+                className={`py-2 px-2 rounded-lg text-[11px] font-bold flex items-center justify-center gap-1.5 transition cursor-pointer ${
+                  installTab === 'mobile'
+                    ? 'bg-emerald-500 text-slate-950 font-black shadow'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <Smartphone className="w-3.5 h-3.5" />
+                <span>Mobile</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setInstallTab('tablet')}
+                className={`py-2 px-2 rounded-lg text-[11px] font-bold flex items-center justify-center gap-1.5 transition cursor-pointer ${
+                  installTab === 'tablet'
+                    ? 'bg-emerald-500 text-slate-950 font-black shadow'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <Tablet className="w-3.5 h-3.5" />
+                <span>Tablet</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setInstallTab('desktop')}
+                className={`py-2 px-2 rounded-lg text-[11px] font-bold flex items-center justify-center gap-1.5 transition cursor-pointer ${
+                  installTab === 'desktop'
+                    ? 'bg-emerald-500 text-slate-950 font-black shadow'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <Monitor className="w-3.5 h-3.5" />
+                <span>Desktop</span>
+              </button>
+            </div>
+
+            {/* Platform-Specific Install Steps */}
+            {installTab === 'mobile' && (
               <div className="space-y-2.5 text-xs text-slate-200">
-                <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
-                  <div className="font-bold text-amber-300">iPhone / iPad (Safari):</div>
-                  <p className="flex items-center gap-2 text-slate-300">
-                    <span className="w-5 h-5 rounded-full bg-slate-800 text-amber-300 font-bold flex items-center justify-center shrink-0">1</span>
-                    <span>Open this page directly in <strong>Safari</strong>.</span>
-                  </p>
-                  <p className="flex items-center gap-2 text-slate-300">
-                    <span className="w-5 h-5 rounded-full bg-slate-800 text-amber-300 font-bold flex items-center justify-center shrink-0">2</span>
-                    <span className="inline-flex items-center gap-1">Tap the <Share className="w-3.5 h-3.5 text-sky-400 inline" /> <strong>Share</strong> button at the bottom bar.</span>
-                  </p>
-                  <p className="flex items-center gap-2 text-slate-300">
-                    <span className="w-5 h-5 rounded-full bg-slate-800 text-amber-300 font-bold flex items-center justify-center shrink-0">3</span>
-                    <span>Scroll and tap <strong>Add to Home Screen</strong>, then tap <strong>Add</strong>.</span>
-                  </p>
-                </div>
+                {isIOS ? (
+                  <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
+                    <div className="font-bold text-amber-300">iPhone (Safari):</div>
+                    <p className="flex items-center gap-2 text-slate-300">
+                      <span className="w-5 h-5 rounded-full bg-slate-800 text-amber-300 font-bold flex items-center justify-center shrink-0">1</span>
+                      <span>Tap <strong>Open App Window</strong> above or open the downloaded file in <strong>Safari</strong>.</span>
+                    </p>
+                    <p className="flex items-center gap-2 text-slate-300">
+                      <span className="w-5 h-5 rounded-full bg-slate-800 text-amber-300 font-bold flex items-center justify-center shrink-0">2</span>
+                      <span className="inline-flex items-center gap-1">Tap <Share className="w-3.5 h-3.5 text-sky-400 inline" /> <strong>Share</strong> at the bottom toolbar.</span>
+                    </p>
+                    <p className="flex items-center gap-2 text-slate-300">
+                      <span className="w-5 h-5 rounded-full bg-slate-800 text-amber-300 font-bold flex items-center justify-center shrink-0">3</span>
+                      <span>Tap <strong>Add to Home Screen</strong> → <strong>Add</strong>.</span>
+                    </p>
+                  </div>
+                ) : (
+                  <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
+                    <div className="font-bold text-emerald-300">Android Phone (Chrome / Edge):</div>
+                    <p className="flex items-center gap-2 text-slate-300">
+                      <span className="w-5 h-5 rounded-full bg-slate-800 text-emerald-300 font-bold flex items-center justify-center shrink-0">1</span>
+                      <span>Tap <strong>Open App Window</strong> above (or open downloaded <strong>Shapla-Poribar-App.html</strong> in Chrome).</span>
+                    </p>
+                    <p className="flex items-center gap-2 text-slate-300">
+                      <span className="w-5 h-5 rounded-full bg-slate-800 text-emerald-300 font-bold flex items-center justify-center shrink-0">2</span>
+                      <span className="inline-flex items-center gap-1">Tap browser menu <MoreVertical className="w-3.5 h-3.5 text-emerald-400 inline" /> (top-right).</span>
+                    </p>
+                    <p className="flex items-center gap-2 text-slate-300">
+                      <span className="w-5 h-5 rounded-full bg-slate-800 text-emerald-300 font-bold flex items-center justify-center shrink-0">3</span>
+                      <span>Tap <strong>Install app</strong> / <strong>Add to Home screen</strong> to install onto your phone.</span>
+                    </p>
+                  </div>
+                )}
               </div>
-            ) : (
-              <div className="space-y-2.5 text-xs text-slate-200">
-                <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
-                  <div className="font-bold text-emerald-300">Android (Chrome) & Desktop Browser:</div>
-                  <p className="flex items-center gap-2 text-slate-300">
-                    <span className="w-5 h-5 rounded-full bg-slate-800 text-emerald-300 font-bold flex items-center justify-center shrink-0">1</span>
-                    <span>Open this website URL directly in your phone's <strong>Chrome</strong> browser.</span>
-                  </p>
-                  <p className="flex items-center gap-2 text-slate-300">
-                    <span className="w-5 h-5 rounded-full bg-slate-800 text-emerald-300 font-bold flex items-center justify-center shrink-0">2</span>
-                    <span className="inline-flex items-center gap-1">Tap the browser menu <MoreVertical className="w-3.5 h-3.5 text-emerald-400 inline" /> (top-right).</span>
-                  </p>
-                  <p className="flex items-center gap-2 text-slate-300">
-                    <span className="w-5 h-5 rounded-full bg-slate-800 text-emerald-300 font-bold flex items-center justify-center shrink-0">3</span>
-                    <span>Tap <strong>Install app</strong> or <strong>Add to Home screen</strong> to download the app icon.</span>
-                  </p>
-                </div>
+            )}
+
+            {installTab === 'tablet' && (
+              <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-2 text-xs text-slate-200">
+                <div className="font-bold text-emerald-300">Tablet (Android Tab & iPad):</div>
+                <p className="flex items-center gap-2 text-slate-300">
+                  <span className="w-5 h-5 rounded-full bg-slate-800 text-emerald-300 font-bold flex items-center justify-center shrink-0">1</span>
+                  <span>Open via <strong>Open App Window</strong> above or launch the downloaded <strong>Shapla-Poribar-App.html</strong>.</span>
+                </p>
+                <p className="flex items-center gap-2 text-slate-300">
+                  <span className="w-5 h-5 rounded-full bg-slate-800 text-emerald-300 font-bold flex items-center justify-center shrink-0">2</span>
+                  <span><strong>Android Tablet:</strong> Tap the address bar Install icon or menu → <strong>Install app</strong>.</span>
+                </p>
+                <p className="flex items-center gap-2 text-slate-300">
+                  <span className="w-5 h-5 rounded-full bg-slate-800 text-emerald-300 font-bold flex items-center justify-center shrink-0">3</span>
+                  <span className="inline-flex items-center gap-1"><strong>iPad (Safari):</strong> Tap <Share className="w-3.5 h-3.5 text-sky-400 inline" /> <strong>Share</strong> → <strong>Add to Home Screen</strong>.</span>
+                </p>
+              </div>
+            )}
+
+            {installTab === 'desktop' && (
+              <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-2 text-xs text-slate-200">
+                <div className="font-bold text-emerald-300">Desktop (Windows, macOS & Linux):</div>
+                <p className="flex items-center gap-2 text-slate-300">
+                  <span className="w-5 h-5 rounded-full bg-slate-800 text-emerald-300 font-bold flex items-center justify-center shrink-0">1</span>
+                  <span>Open in Chrome or Edge via <strong>Open App Window</strong> above (or double-click downloaded <strong>Shapla-Poribar-App.html</strong>).</span>
+                </p>
+                <p className="flex items-center gap-2 text-slate-300">
+                  <span className="w-5 h-5 rounded-full bg-slate-800 text-emerald-300 font-bold flex items-center justify-center shrink-0">2</span>
+                  <span>Click the <strong>Install Shapla Poribar</strong> icon on the right side of the browser address bar (or menu → <strong>Cast, save, and share</strong> → <strong>Install page as app</strong>).</span>
+                </p>
+                <p className="flex items-center gap-2 text-slate-300">
+                  <span className="w-5 h-5 rounded-full bg-slate-800 text-emerald-300 font-bold flex items-center justify-center shrink-0">3</span>
+                  <span>Confirm <strong>Install</strong> to add the standalone app to your Desktop, Start Menu, or Dock.</span>
+                </p>
               </div>
             )}
 
             {/* Direct App Link Copy Helper */}
             <div className="p-3 rounded-xl bg-slate-950/90 border border-slate-800 space-y-2">
-              <div className="text-[11px] font-bold text-slate-400">Official App Link (open in Chrome / Safari to install):</div>
+              <div className="text-[11px] font-bold text-slate-400">Official App Link (Works on Mobile, Tablet & Desktop):</div>
               <div className="flex items-center gap-2">
                 <input
                   type="text"
                   readOnly
-                  value={typeof window !== 'undefined' ? window.location.origin : ''}
+                  value={appOriginUrl}
                   className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-[11px] text-amber-300 font-mono outline-none"
                 />
                 <button

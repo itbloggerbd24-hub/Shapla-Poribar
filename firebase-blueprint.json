@@ -1,0 +1,241 @@
+{
+  "entities": {
+    "UserPublic": {
+      "title": "UserPublic",
+      "description": "Non-sensitive user profile and Firebase identity anchor",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth UID",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "appUserId": {
+          "type": "string",
+          "description": "Application user ID",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Display name",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "role": {
+          "type": "string",
+          "enum": ["USER", "ADMIN"],
+          "description": "User role"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Creation server timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last update server timestamp"
+        }
+      },
+      "required": ["uid", "appUserId", "displayName", "role", "createdAt", "updatedAt"]
+    },
+    "UserPrivateAccount": {
+      "title": "UserPrivateAccount",
+      "description": "Isolated private account backup containing phone, NID, security recovery, wallet balances, and referral progress",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth UID owning this account",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "appUserId": {
+          "type": "string",
+          "description": "Application user ID",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "phone": {
+          "type": "string",
+          "minLength": 6,
+          "maxLength": 32
+        },
+        "password": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "nid": {
+          "type": "string",
+          "maxLength": 32
+        },
+        "securityQuestion": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "securityAnswer": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "binancePayId": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "binanceAddress": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "referralCode": {
+          "type": "string",
+          "maxLength": 32
+        },
+        "referredBy": {
+          "type": "string",
+          "maxLength": 32
+        },
+        "walletBalance": {
+          "type": "number"
+        },
+        "lockedBonusBalance": {
+          "type": "number"
+        },
+        "frozenWithdrawal": {
+          "type": "number"
+        },
+        "totalWon": {
+          "type": "number"
+        },
+        "totalLost": {
+          "type": "number"
+        },
+        "totalWagered": {
+          "type": "number"
+        },
+        "referralCount": {
+          "type": "number"
+        },
+        "referralBonusEarned": {
+          "type": "number"
+        },
+        "firstDepositDone": {
+          "type": "boolean"
+        },
+        "claimedFestivalBonusId": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "lastWeeklyClaim": {
+          "type": "number"
+        },
+        "lastMonthlyClaim": {
+          "type": "number"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "uid",
+        "appUserId",
+        "name",
+        "phone",
+        "password",
+        "walletBalance",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "AdminSnapshot": {
+      "title": "AdminSnapshot",
+      "description": "Admin-managed cloud backup snapshot of platform records for cross-deployment recovery",
+      "type": "object",
+      "properties": {
+        "snapshotId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userCount": {
+          "type": "number"
+        },
+        "payload": {
+          "type": "object"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["snapshotId", "ownerUid", "userCount", "payload", "createdAt", "updatedAt"]
+    },
+    "AdminRecord": {
+      "title": "AdminRecord",
+      "description": "Authorized platform administrator document",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "email": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 160
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "email", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserPublic" },
+      "description": "Public/owner-scoped user anchor documents"
+    },
+    "/users/{userId}/private/account": {
+      "schema": { "$ref": "#/entities/UserPrivateAccount" },
+      "description": "Isolated private user account & PII backup"
+    },
+    "/adminSnapshots/{snapshotId}": {
+      "schema": { "$ref": "#/entities/AdminSnapshot" },
+      "description": "Admin-only full cloud backup snapshots of users, settings, deposits, and withdrawals"
+    },
+    "/admins/{adminId}": {
+      "schema": { "$ref": "#/entities/AdminRecord" },
+      "description": "Authoritative admin allowlist lookup"
+    }
+  }
+}

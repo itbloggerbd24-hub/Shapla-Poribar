@@ -18,8 +18,10 @@ import {
   ArrowUpCircle,
   Award,
   CheckCircle2,
-  Lock
+  Lock,
+  Cloud
 } from 'lucide-react';
+import { authApi } from '../utils/authApi';
 
 interface ProfileModalProps {
   isOpen: boolean;
@@ -40,8 +42,22 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
 }) => {
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedPhone, setCopiedPhone] = useState(false);
+  const [cloudMsg, setCloudMsg] = useState<string | null>(null);
+  const [cloudBusy, setCloudBusy] = useState(false);
 
   if (!isOpen) return null;
+
+  const handleBackupToCloud = async () => {
+    setCloudBusy(true);
+    setCloudMsg(null);
+    const res = await authApi.backupAccountToGoogleCloud(user);
+    setCloudBusy(false);
+    if (res.success) {
+      setCloudMsg(`Backed up to Google Cloud (${res.email || 'linked'})`);
+    } else {
+      setCloudMsg(res.error || 'Could not complete cloud backup.');
+    }
+  };
 
   const handleCopy = (text: string, type: 'CODE' | 'PHONE') => {
     navigator.clipboard.writeText(text);
@@ -224,6 +240,22 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                 <div className="font-mono font-bold text-amber-300 text-xs">
                   {user.binancePayId || '1156528658 (Default)'}
                 </div>
+              </div>
+
+              {/* Cloud Firestore Account Backup */}
+              <div className="pt-1 space-y-1.5">
+                <button
+                  type="button"
+                  disabled={cloudBusy}
+                  onClick={handleBackupToCloud}
+                  className="w-full py-2 px-3 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 font-bold text-xs flex items-center justify-center gap-2 transition cursor-pointer"
+                >
+                  <Cloud className="w-3.5 h-3.5" />
+                  <span>{cloudBusy ? 'Syncing to Cloud...' : 'Backup Account to Google Cloud'}</span>
+                </button>
+                {cloudMsg && (
+                  <p className="text-[11px] text-emerald-300 text-center font-medium">{cloudMsg}</p>
+                )}
               </div>
 
             </div>

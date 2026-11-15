@@ -21,6 +21,8 @@ export default defineConfig(() => {
           'pwa-192x192.png',
           'pwa-512x512.png',
           'pwa-maskable-512x512.png',
+          'screenshot-wide.jpg',
+          'screenshot-mobile.jpg',
         ],
         manifest: {
           id: '/',
@@ -30,7 +32,9 @@ export default defineConfig(() => {
           theme_color: '#020617',
           background_color: '#020617',
           display: 'standalone',
-          orientation: 'portrait',
+          display_override: ['window-controls-overlay', 'standalone', 'minimal-ui'],
+          orientation: 'any',
+          categories: ['games', 'entertainment'],
           scope: '/',
           start_url: '/',
           icons: [
@@ -53,9 +57,26 @@ export default defineConfig(() => {
               purpose: 'maskable',
             },
           ],
+          screenshots: [
+            {
+              src: 'screenshot-wide.jpg',
+              sizes: '1376x768',
+              type: 'image/jpeg',
+              form_factor: 'wide',
+              label: 'Shapla Poribar Desktop & Tablet Arena',
+            },
+            {
+              src: 'screenshot-mobile.jpg',
+              sizes: '768x1376',
+              type: 'image/jpeg',
+              form_factor: 'narrow',
+              label: 'Shapla Poribar Mobile Prediction Arena',
+            },
+          ],
         },
         workbox: {
-          globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+          globPatterns: ['**/*.{js,css,html,ico,png,jpg,svg,woff2}'],
+          maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
           navigateFallback: 'index.html',
           navigateFallbackDenylist: [/^\/api\//],
         },

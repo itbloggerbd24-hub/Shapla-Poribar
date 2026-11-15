@@ -9,6 +9,16 @@ import {
   mergeServerUsersIntoVault,
   findVaultUser,
 } from './accountVault';
+import {
+  auth,
+  signInWithGooglePopup,
+  syncUserPrivateBackup,
+  loadUserPrivateBackup,
+  saveAdminCloudSnapshot,
+  loadAdminCloudSnapshot,
+  isFirebaseAdminUser,
+  PlatformCloudSnapshot,
+} from '../lib/firebase';
 
 export { normalizePhone, isPhoneMatch };
 
@@ -32,6 +42,26 @@ const syncUserToServer = async (user: UserProfile): Promise<boolean> => {
     return res.ok;
   } catch {
     return false;
+  }
+};
+
+let adminSnapshotTimer: ReturnType<typeof setTimeout> | null = null;
+
+const mirrorAccountToCloudIfSignedIn = (user: UserProfile) => {
+  const fbUser = auth.currentUser;
+  if (!fbUser || !fbUser.emailVerified) return;
+
+  void syncUserPrivateBackup(fbUser, user).catch((err) => {
+    console.warn('Cloud backup sync skipped:', err);
+  });
+
+  if (isFirebaseAdminUser(fbUser)) {
+    if (adminSnapshotTimer) clearTimeout(adminSnapshotTimer);
+    adminSnapshotTimer = setTimeout(() => {
+      void authApi.pushAdminCloudSnapshot().catch((err) => {
+        console.warn('Admin cloud snapshot push skipped:', err);
+      });
+    }, 600);
   }
 };
 
@@ -96,15 +126,17 @@ export const authApi = {
       if (!res.ok) {
         return { success: false, error: json.error || 'Registration failed' };
       }
-      // Guarantee dual persistent vault storage (localStorage + IndexedDB)
+      // Guarantee dual persistent vault storage (localStorage + IndexedDB) + Cloud Firestore mirror
       if (json.user) {
-        saveUserToVault({
+        const fullRegUser: UserProfile = {
           ...json.user,
           password: data.password.trim(),
           nid: data.nid.trim(),
           securityQuestion: data.securityQuestion.trim(),
           securityAnswer: data.securityAnswer.trim().toLowerCase(),
-        });
+        };
+        saveUserToVault(fullRegUser);
+        mirrorAccountToCloudIfSignedIn(fullRegUser);
       }
       return { success: true, user: json.user };
     } catch (e) {
@@ -142,11 +174,12 @@ export const authApi = {
       };
 
       saveUserToVault(newUser);
+      mirrorAccountToCloudIfSignedIn(newUser);
       return { success: true, user: newUser };
     }
   },
 
-  // Login: universal across devices and website updates with IndexedDB + localStorage vault auto-restore
+  // Login: universal across devices and website updates with IndexedDB + localStorage vault + Cloud auto-restore
   async login(phone: string, password: string): Promise<AuthResponse> {
     const cleanPassword = password.trim();
     try {
@@ -157,7 +190,9 @@ export const authApi = {
       });
       const json = await res.json();
       if (res.ok && json.success && json.user) {
-        saveUserToVault({ ...json.user, password: cleanPassword });
+        const loggedUser = { ...json.user, password: cleanPassword };
+        saveUserToVault(loggedUser);
+        mirrorAccountToCloudIfSignedIn(loggedUser);
         return { success: true, user: json.user };
       }
 
@@ -730,7 +765,154 @@ export const authApi = {
     } catch (e) {
       return { success: false, error: 'Network error publishing notice' };
     }
-  }
+  },
+
+  // Google Cloud Sync: Link / Restore User Account from Cloud Firestore
+  async signInWithGoogleCloud(): Promise<{
+    success: boolean;
+    user?: UserProfile;
+    needsAccountLink?: boolean;
+    isAdmin?: boolean;
+    email?: string;
+    restoredUsers?: number;
+    error?: string;
+  }> {
+    try {
+      const fbUser = await signInWithGooglePopup();
+      const admin = isFirebaseAdminUser(fbUser);
+      let restoredUsers = 0;
+
+      if (admin) {
+        const snapRestore = await authApi.pullAdminCloudSnapshot();
+        restoredUsers = snapRestore.restoredUsers || 0;
+      }
+
+      const backedUpUser = await loadUserPrivateBackup(fbUser);
+      if (backedUpUser && backedUpUser.phone) {
+        await syncUserToServer(backedUpUser);
+        saveUserToVault(backedUpUser);
+        return {
+          success: true,
+          user: backedUpUser,
+          isAdmin: admin,
+          email: fbUser.email || undefined,
+          restoredUsers,
+        };
+      }
+
+      return {
+        success: true,
+        needsAccountLink: true,
+        isAdmin: admin,
+        email: fbUser.email || undefined,
+        restoredUsers,
+      };
+    } catch (e: any) {
+      return {
+        success: false,
+        error: e?.message || 'Google Cloud sign-in cancelled or failed.',
+      };
+    }
+  },
+
+  // Backup an existing logged-in Phone/NID user account into Cloud Firestore
+  async backupAccountToGoogleCloud(user: UserProfile): Promise<{
+    success: boolean;
+    email?: string;
+    isAdmin?: boolean;
+    error?: string;
+  }> {
+    try {
+      let fbUser = auth.currentUser;
+      if (!fbUser) {
+        fbUser = await signInWithGooglePopup();
+      }
+      const vaultMatch = await findVaultUser(user.phone || user.id);
+      const mergedUser: UserProfile = vaultMatch
+        ? {
+            ...vaultMatch,
+            ...user,
+            password: user.password || vaultMatch.password,
+            nid: user.nid || vaultMatch.nid,
+            securityQuestion: user.securityQuestion || vaultMatch.securityQuestion,
+            securityAnswer: user.securityAnswer || vaultMatch.securityAnswer,
+          }
+        : user;
+      saveUserToVault(mergedUser);
+      await syncUserPrivateBackup(fbUser, mergedUser);
+      const admin = isFirebaseAdminUser(fbUser);
+      if (admin) {
+        await authApi.pushAdminCloudSnapshot();
+      }
+      return {
+        success: true,
+        email: fbUser.email || undefined,
+        isAdmin: admin,
+      };
+    } catch (e: any) {
+      return {
+        success: false,
+        error: e?.message || 'Cloud backup failed.',
+      };
+    }
+  },
+
+  // Push complete platform state to Cloud Firestore (Admin only)
+  async pushAdminCloudSnapshot(): Promise<{ success: boolean; userCount?: number; error?: string }> {
+    try {
+      const fbUser = auth.currentUser;
+      if (!fbUser || !isFirebaseAdminUser(fbUser)) {
+        return { success: false, error: 'Admin Google verification required.' };
+      }
+      const idToken = await fbUser.getIdToken();
+      const res = await fetch(`${API_BASE}/admin/export-snapshot`, {
+        headers: { Authorization: `Bearer ${idToken}` },
+      });
+      if (!res.ok) {
+        return { success: false, error: 'Failed to export server database snapshot.' };
+      }
+      const json = await res.json();
+      const snapshot = json.snapshot as PlatformCloudSnapshot;
+      if (!snapshot || !Array.isArray(snapshot.users)) {
+        return { success: false, error: 'Invalid snapshot format.' };
+      }
+      await saveAdminCloudSnapshot(fbUser, snapshot);
+      return { success: true, userCount: snapshot.users.length };
+    } catch (e: any) {
+      return { success: false, error: e?.message || 'Cloud snapshot upload failed.' };
+    }
+  },
+
+  // Pull complete platform state from Cloud Firestore into updated server (Admin only)
+  async pullAdminCloudSnapshot(): Promise<{ success: boolean; restoredUsers?: number; error?: string }> {
+    try {
+      const fbUser = auth.currentUser;
+      if (!fbUser || !isFirebaseAdminUser(fbUser)) {
+        return { success: false, error: 'Admin Google verification required.' };
+      }
+      const snapshot = await loadAdminCloudSnapshot(fbUser);
+      if (!snapshot || !Array.isArray(snapshot.users)) {
+        return { success: true, restoredUsers: 0 };
+      }
+      const idToken = await fbUser.getIdToken();
+      const res = await fetch(`${API_BASE}/auth/sync-full-snapshot`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({ snapshot }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        return { success: false, error: json.error || 'Snapshot restore failed.' };
+      }
+      await mergeServerUsersIntoVault(snapshot.users);
+      return { success: true, restoredUsers: json.restoredUsers || 0 };
+    } catch (e: any) {
+      return { success: false, error: e?.message || 'Cloud snapshot restore failed.' };
+    }
+  },
 };
 
 

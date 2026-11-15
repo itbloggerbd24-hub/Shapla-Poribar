@@ -44,6 +44,7 @@ import { DepositAnalyticsModal } from './components/DepositAnalyticsModal';
 import { PayoutAnalyticsModal } from './components/PayoutAnalyticsModal';
 import { authApi } from './utils/authApi';
 import { saveUserToVault, getVaultUsersSync } from './utils/accountVault';
+import { subscribeFirebaseAuth, isFirebaseAdminUser, auth, syncUserPrivateBackup } from './lib/firebase';
 import { checkWithdrawalHours } from './utils/withdrawalHours';
 import { 
   Coins, 
@@ -205,11 +206,42 @@ export default function App() {
     });
   }, [currentUser?.id]);
 
+  // Listen to Firebase Auth for permanent Cloud Firestore restore/sync across updates
+  useEffect(() => {
+    const unsubscribe = subscribeFirebaseAuth(async (fbUser) => {
+      if (!fbUser || !fbUser.emailVerified) return;
+
+      if (isFirebaseAdminUser(fbUser)) {
+        const res = await authApi.pullAdminCloudSnapshot();
+        if (res.success && (res.restoredUsers || 0) > 0) {
+          const [refreshedUsers, refreshedDeps, refreshedWths, refreshedSettings] = await Promise.all([
+            authApi.fetchUsers(),
+            authApi.fetchDeposits(),
+            authApi.fetchWithdrawals(),
+            authApi.fetchSettings(),
+          ]);
+          if (refreshedUsers?.length) setAllUsers(refreshedUsers);
+          if (refreshedDeps?.length) setDeposits(refreshedDeps);
+          if (refreshedWths?.length) setWithdrawals(refreshedWths);
+          if (refreshedSettings) {
+            setAdminSettings((prev) => sanitizeAdminSettings({ ...prev, ...refreshedSettings }));
+          }
+        }
+      } else if (currentUser) {
+        void syncUserPrivateBackup(fbUser, currentUser).catch(() => {});
+      }
+    });
+    return () => unsubscribe();
+  }, [currentUser?.id]);
+
   const handleUpdateSettings = async (newSettings: AdminSettings) => {
     const sanitized = sanitizeAdminSettings(newSettings);
     setAdminSettings(sanitized);
     saveToStorage('admin_settings_usd', sanitized);
     await authApi.updateSettings(sanitized);
+    if (isFirebaseAdminUser(auth.currentUser)) {
+      void authApi.pushAdminCloudSnapshot().catch(() => {});
+    }
   };
 
   const handleGrantUserBonus = async (userId: string, amountUSD: number, note?: string) => {
@@ -226,6 +258,9 @@ export default function App() {
       authApi.fetchNotifications(user.id).then((notifs) => {
         if (notifs) setNotifications(notifs);
       });
+      if (isFirebaseAdminUser(auth.currentUser)) {
+        void authApi.pushAdminCloudSnapshot().catch(() => {});
+      }
       return true;
     }
     return false;
@@ -248,6 +283,9 @@ export default function App() {
       setNotifications((prev) => [res.notification, ...prev]);
       if (res.quickNotice) {
         setAdminSettings((prev) => ({ ...prev, quickNotice: res.quickNotice }));
+      }
+      if (isFirebaseAdminUser(auth.currentUser)) {
+        void authApi.pushAdminCloudSnapshot().catch(() => {});
       }
       return true;
     }
@@ -279,6 +317,9 @@ export default function App() {
     }
     if (currentUser && currentUser.id === userId) {
       setCurrentUser((prev) => (prev ? { ...prev, isSuspended: suspended, suspensionReason: reason } : null));
+    }
+    if (isFirebaseAdminUser(auth.currentUser)) {
+      void authApi.pushAdminCloudSnapshot().catch(() => {});
     }
   };
 
@@ -911,6 +952,9 @@ export default function App() {
         return d;
       })
     );
+    if (isFirebaseAdminUser(auth.currentUser)) {
+      void authApi.pushAdminCloudSnapshot().catch(() => {});
+    }
   };
 
   // Admin Reject Deposit
@@ -919,6 +963,9 @@ export default function App() {
     setDeposits((prev) =>
       prev.map((d) => (d.id === depositId ? { ...d, status: 'REJECTED', adminNote: note, updatedAt: Date.now() } : d))
     );
+    if (isFirebaseAdminUser(auth.currentUser)) {
+      void authApi.pushAdminCloudSnapshot().catch(() => {});
+    }
   };
 
   // Admin Approve Withdrawal
@@ -942,6 +989,9 @@ export default function App() {
         return w;
       })
     );
+    if (isFirebaseAdminUser(auth.currentUser)) {
+      void authApi.pushAdminCloudSnapshot().catch(() => {});
+    }
   };
 
   // Admin Reject Withdrawal
@@ -984,6 +1034,9 @@ export default function App() {
       });
     }
     setAllUsers((users) => users.map((u) => (u.id === userId ? { ...u, walletBalance: newBalance } : u)));
+    if (isFirebaseAdminUser(auth.currentUser)) {
+      void authApi.pushAdminCloudSnapshot().catch(() => {});
+    }
   };
 
   const userCurrentBets = allBets.filter(

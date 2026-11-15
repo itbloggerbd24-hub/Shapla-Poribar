@@ -1,0 +1,219 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Pillar 4 Global Safety Net: Default-Deny Catch-All
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Hardened Global Helpers
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAdminEmail() {
+      return isSignedIn() &&
+        request.auth.token.email == 'itbloggerbd24@gmail.com' &&
+        request.auth.token.email_verified == true;
+    }
+
+    function isAdmin() {
+      return isAdminEmail() || (isSignedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid)));
+    }
+
+    // Validation Blueprint: UserPublic (/users/{userId})
+    function isValidUserPublic(data) {
+      return data.keys().hasAll(['uid', 'appUserId', 'displayName', 'role', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['uid', 'appUserId', 'displayName', 'role', 'createdAt', 'updatedAt']) &&
+        isValidId(data.uid) &&
+        isValidId(data.appUserId) &&
+        data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 120 &&
+        data.role is string && (data.role == 'USER' || data.role == 'ADMIN') &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    // Validation Blueprint: UserPrivateAccount (/users/{userId}/private/account)
+    function isValidUserPrivateAccount(data) {
+      return data.keys().hasAll(['uid', 'appUserId', 'name', 'phone', 'password', 'walletBalance', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly([
+          'uid', 'appUserId', 'name', 'phone', 'password', 'nid',
+          'securityQuestion', 'securityAnswer', 'binancePayId', 'binanceAddress',
+          'referralCode', 'referredBy', 'walletBalance', 'lockedBonusBalance',
+          'frozenWithdrawal', 'totalWon', 'totalLost', 'totalWagered',
+          'referralCount', 'referralBonusEarned', 'firstDepositDone',
+          'claimedFestivalBonusId', 'lastWeeklyClaim', 'lastMonthlyClaim',
+          'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.uid) &&
+        isValidId(data.appUserId) &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 120 &&
+        data.phone is string && data.phone.size() >= 6 && data.phone.size() <= 32 &&
+        data.password is string && data.password.size() >= 1 && data.password.size() <= 128 &&
+        data.walletBalance is number && data.walletBalance >= 0 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp &&
+        (!('nid' in data) || (data.nid is string && data.nid.size() <= 32)) &&
+        (!('securityQuestion' in data) || (data.securityQuestion is string && data.securityQuestion.size() <= 200)) &&
+        (!('securityAnswer' in data) || (data.securityAnswer is string && data.securityAnswer.size() <= 120)) &&
+        (!('binancePayId' in data) || (data.binancePayId is string && data.binancePayId.size() <= 64)) &&
+        (!('binanceAddress' in data) || (data.binanceAddress is string && data.binanceAddress.size() <= 128)) &&
+        (!('referralCode' in data) || (data.referralCode is string && data.referralCode.size() <= 32)) &&
+        (!('referredBy' in data) || (data.referredBy is string && data.referredBy.size() <= 32)) &&
+        (!('lockedBonusBalance' in data) || (data.lockedBonusBalance is number && data.lockedBonusBalance >= 0)) &&
+        (!('frozenWithdrawal' in data) || (data.frozenWithdrawal is number && data.frozenWithdrawal >= 0)) &&
+        (!('totalWon' in data) || (data.totalWon is number && data.totalWon >= 0)) &&
+        (!('totalLost' in data) || (data.totalLost is number && data.totalLost >= 0)) &&
+        (!('totalWagered' in data) || (data.totalWagered is number && data.totalWagered >= 0)) &&
+        (!('referralCount' in data) || (data.referralCount is number && data.referralCount >= 0)) &&
+        (!('referralBonusEarned' in data) || (data.referralBonusEarned is number && data.referralBonusEarned >= 0)) &&
+        (!('firstDepositDone' in data) || data.firstDepositDone is bool) &&
+        (!('claimedFestivalBonusId' in data) || (data.claimedFestivalBonusId is string && data.claimedFestivalBonusId.size() <= 64)) &&
+        (!('lastWeeklyClaim' in data) || data.lastWeeklyClaim is number) &&
+        (!('lastMonthlyClaim' in data) || data.lastMonthlyClaim is number);
+    }
+
+    // Validation Blueprint: AdminSnapshot (/adminSnapshots/{snapshotId})
+    function isValidAdminSnapshot(data) {
+      return data.keys().hasAll(['snapshotId', 'ownerUid', 'userCount', 'payload', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['snapshotId', 'ownerUid', 'userCount', 'payload', 'createdAt', 'updatedAt']) &&
+        isValidId(data.snapshotId) &&
+        isValidId(data.ownerUid) &&
+        data.userCount is number && data.userCount >= 0 &&
+        data.payload is map &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    // Validation Blueprint: AdminRecord (/admins/{adminId})
+    function isValidAdminRecord(data) {
+      return data.keys().hasAll(['uid', 'email', 'createdAt']) &&
+        data.keys().hasOnly(['uid', 'email', 'createdAt']) &&
+        isValidId(data.uid) &&
+        data.email is string && data.email.size() >= 3 && data.email.size() <= 160 &&
+        data.createdAt is timestamp;
+    }
+
+    // Collection: /users/{userId}
+    match /users/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isSignedIn() && (resource.data.uid == request.auth.uid || isAdminEmail());
+      allow create: if isValidId(userId) &&
+        isSignedIn() &&
+        isValidUserPublic(incoming()) &&
+        incoming().uid == request.auth.uid &&
+        incoming().uid == userId &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        (incoming().role == 'USER' || isAdmin());
+      allow update: if isValidId(userId) &&
+        isSignedIn() &&
+        isValidUserPublic(incoming()) &&
+        incoming().uid == existing().uid &&
+        incoming().appUserId == existing().appUserId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (
+          (
+            isOwner(userId) &&
+            incoming().role == existing().role &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'updatedAt'])
+          ) ||
+          isAdmin()
+        );
+      allow delete: if isValidId(userId) && isAdmin();
+
+      // Subcollection: /users/{userId}/private/account (Strict PII Isolation)
+      match /private/{docId} {
+        allow get: if isValidId(userId) && docId == 'account' &&
+          exists(/databases/$(database)/documents/users/$(userId)) &&
+          (isOwner(userId) || isAdmin());
+        allow list: if false;
+        allow create: if isValidId(userId) && docId == 'account' &&
+          isSignedIn() &&
+          isOwner(userId) &&
+          exists(/databases/$(database)/documents/users/$(userId)) &&
+          isValidUserPrivateAccount(incoming()) &&
+          incoming().uid == request.auth.uid &&
+          incoming().createdAt == request.time &&
+          incoming().updatedAt == request.time;
+        allow update: if isValidId(userId) && docId == 'account' &&
+          isSignedIn() &&
+          (isOwner(userId) || isAdmin()) &&
+          exists(/databases/$(database)/documents/users/$(userId)) &&
+          isValidUserPrivateAccount(incoming()) &&
+          incoming().uid == existing().uid &&
+          incoming().appUserId == existing().appUserId &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time &&
+          (
+            (
+              isOwner(userId) &&
+              incoming().diff(existing()).affectedKeys().hasOnly([
+                'name', 'phone', 'password', 'nid', 'securityQuestion', 'securityAnswer',
+                'binancePayId', 'binanceAddress', 'referralCode', 'referredBy',
+                'walletBalance', 'lockedBonusBalance', 'frozenWithdrawal',
+                'totalWon', 'totalLost', 'totalWagered', 'referralCount',
+                'referralBonusEarned', 'firstDepositDone', 'claimedFestivalBonusId',
+                'lastWeeklyClaim', 'lastMonthlyClaim', 'updatedAt'
+              ])
+            ) ||
+            isAdmin()
+          );
+        allow delete: if isValidId(userId) && docId == 'account' && isAdmin();
+      }
+    }
+
+    // Collection: /adminSnapshots/{snapshotId} (Cloud Backup Sync for Admin)
+    match /adminSnapshots/{snapshotId} {
+      allow get: if isValidId(snapshotId) && isAdmin();
+      allow list: if isAdminEmail();
+      allow create: if isValidId(snapshotId) &&
+        isAdmin() &&
+        isValidAdminSnapshot(incoming()) &&
+        incoming().snapshotId == snapshotId &&
+        incoming().ownerUid == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isValidId(snapshotId) &&
+        isAdmin() &&
+        isValidAdminSnapshot(incoming()) &&
+        incoming().snapshotId == existing().snapshotId &&
+        incoming().ownerUid == existing().ownerUid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['userCount', 'payload', 'updatedAt']);
+      allow delete: if isValidId(snapshotId) && isAdmin();
+    }
+
+    // Collection: /admins/{adminId}
+    match /admins/{adminId} {
+      allow get: if isValidId(adminId) && (isOwner(adminId) || isAdmin());
+      allow list: if isAdminEmail();
+      allow create: if isValidId(adminId) &&
+        isAdmin() &&
+        isValidAdminRecord(incoming()) &&
+        incoming().uid == adminId &&
+        incoming().createdAt == request.time;
+      allow update: if false;
+      allow delete: if isValidId(adminId) && isAdminEmail();
+    }
+  }
+}
